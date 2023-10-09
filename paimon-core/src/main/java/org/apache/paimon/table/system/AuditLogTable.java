@@ -19,6 +19,7 @@
 package org.apache.paimon.table.system;
 
 import org.apache.paimon.CoreOptions;
+import org.apache.paimon.FileStore;
 import org.apache.paimon.Snapshot;
 import org.apache.paimon.consumer.ConsumerManager;
 import org.apache.paimon.data.BinaryRow;
@@ -27,15 +28,20 @@ import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.disk.IOManager;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.Path;
+import org.apache.paimon.manifest.ManifestCacheFilter;
 import org.apache.paimon.predicate.LeafPredicate;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.predicate.PredicateReplaceVisitor;
 import org.apache.paimon.reader.RecordReader;
-import org.apache.paimon.table.DataTable;
+import org.apache.paimon.schema.TableSchema;
+import org.apache.paimon.table.BucketMode;
+import org.apache.paimon.table.CatalogEnvironment;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.ReadonlyTable;
 import org.apache.paimon.table.Table;
+import org.apache.paimon.table.sink.TableCommitImpl;
+import org.apache.paimon.table.sink.TableWriteImpl;
 import org.apache.paimon.table.source.InnerStreamTableScan;
 import org.apache.paimon.table.source.InnerTableRead;
 import org.apache.paimon.table.source.InnerTableScan;
@@ -61,7 +67,6 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -70,7 +75,7 @@ import java.util.stream.Collectors;
 import static org.apache.paimon.catalog.Catalog.SYSTEM_TABLE_SPLITTER;
 
 /** A {@link Table} for reading audit log of table. */
-public class AuditLogTable implements DataTable, ReadonlyTable {
+public class AuditLogTable implements FileStoreTable, ReadonlyTable {
 
     public static final String AUDIT_LOG = "audit_log";
 
@@ -115,13 +120,37 @@ public class AuditLogTable implements DataTable, ReadonlyTable {
     }
 
     @Override
+    public List<String> primaryKeys() {
+        return dataTable.primaryKeys();
+    }
+
+    @Override
     public Map<String, String> options() {
         return dataTable.options();
     }
 
     @Override
-    public List<String> primaryKeys() {
-        return Collections.emptyList();
+    public Optional<String> comment() {
+        return dataTable.comment();
+    }
+
+    public TableSchema schema() {
+        return dataTable.schema();
+    }
+
+    @Override
+    public FileStore<?> store() {
+        return dataTable.store();
+    }
+
+    @Override
+    public BucketMode bucketMode() {
+        return dataTable.bucketMode();
+    }
+
+    @Override
+    public CatalogEnvironment catalogEnvironment() {
+        return dataTable.catalogEnvironment();
     }
 
     @Override
@@ -165,8 +194,42 @@ public class AuditLogTable implements DataTable, ReadonlyTable {
     }
 
     @Override
-    public Table copy(Map<String, String> dynamicOptions) {
+    public FileStoreTable copy(Map<String, String> dynamicOptions) {
         return new AuditLogTable(dataTable.copy(dynamicOptions));
+    }
+
+    @Override
+    public FileStoreTable internalCopyWithoutCheck(Map<String, String> dynamicOptions) {
+        return dataTable.internalCopyWithoutCheck(dynamicOptions);
+    }
+
+    @Override
+    public FileStoreTable copyWithLatestSchema() {
+        return dataTable.copyWithLatestSchema();
+    }
+
+    @Override
+    public TableWriteImpl<?> newWrite(String commitUser) {
+        throw new UnsupportedOperationException(
+                String.format(
+                        "Auditlog Table %s does not support newWrite.",
+                        this.getClass().getSimpleName()));
+    }
+
+    @Override
+    public TableWriteImpl<?> newWrite(String commitUser, ManifestCacheFilter manifestFilter) {
+        throw new UnsupportedOperationException(
+                String.format(
+                        "Auditlog Table %s does not support newWrite.",
+                        this.getClass().getSimpleName()));
+    }
+
+    @Override
+    public TableCommitImpl newCommit(String commitUser) {
+        throw new UnsupportedOperationException(
+                String.format(
+                        "Auditlog Table %s does not support newCommit.",
+                        this.getClass().getSimpleName()));
     }
 
     @Override

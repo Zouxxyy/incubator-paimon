@@ -22,6 +22,7 @@ import org.apache.paimon.options.Options
 import org.apache.paimon.spark.commands.WriteIntoPaimonTable
 import org.apache.paimon.spark.sources.PaimonSink
 import org.apache.paimon.table.{FileStoreTable, FileStoreTableFactory}
+import org.apache.paimon.table.system.AuditLogTable
 
 import org.apache.spark.sql.{DataFrame, SaveMode => SparkSaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, Table}
@@ -80,7 +81,12 @@ class SparkSource
     val catalogContext = CatalogContext.create(
       Options.fromMap(options),
       SparkSession.active.sessionState.newHadoopConf())
-    FileStoreTableFactory.create(catalogContext)
+    val table = FileStoreTableFactory.create(catalogContext)
+    if (Options.fromMap(options).get(SparkConnectorOptions.READ_CHANGELOG)) {
+      new AuditLogTable(table)
+    } else {
+      table
+    }
   }
 
   override def createSink(
