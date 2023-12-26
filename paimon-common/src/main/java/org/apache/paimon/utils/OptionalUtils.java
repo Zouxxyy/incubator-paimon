@@ -16,32 +16,13 @@
  * limitations under the License.
  */
 
-package org.apache.paimon.format;
+package org.apache.paimon.utils;
 
-import org.apache.paimon.fs.FileIO;
-import org.apache.paimon.fs.Path;
-import org.apache.paimon.utils.Pair;
+import java.util.OptionalLong;
 
-import java.io.IOException;
-
-/** Extracts statistics directly from file. */
-public interface TableStatsExtractor {
-
-    FieldStats[] extract(FileIO fileIO, Path path) throws IOException;
-
-    Pair<FieldStats[], FileInfo> extractWithFileInfo(FileIO fileIO, Path path) throws IOException;
-
-    /** File info fetched from physical file. */
-    class FileInfo {
-
-        private final long rowCount;
-
-        public FileInfo(long rowCount) {
-            this.rowCount = rowCount;
-        }
-
-        public long getRowCount() {
-            return rowCount;
-        }
+/** Utils for Optional. * */
+public class OptionalUtils {
+    public static OptionalLong of(Long value) {
+        return value == null ? OptionalLong.empty() : OptionalLong.of(value);
     }
 }

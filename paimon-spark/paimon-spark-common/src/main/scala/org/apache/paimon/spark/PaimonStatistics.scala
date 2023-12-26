@@ -17,11 +17,22 @@
  */
 package org.apache.paimon.spark
 
+import org.apache.paimon.format.FieldStats
+import org.apache.paimon.stats.{FieldStatsArraySerializer, FullTableStats, FullTableStatsCollector}
+import org.apache.paimon.table.source.DataSplit
+import org.apache.paimon.types.{DataField, DataType}
+import org.apache.paimon.utils.OptionalUtils
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Utils
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.Statistics
+import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 
-import java.util.OptionalLong
+import java.util
+import java.util.{Optional, OptionalLong}
 
-case class PaimonStatistics[T <: PaimonBaseScan](scan: T) extends Statistics {
+case class PaimonStatistics[T <: PaimonBaseScan](scan: T) extends Statistics with Logging {
 
   private lazy val rowCount: Long = scan.getSplits.map(_.rowCount).sum
 
@@ -31,5 +42,60 @@ case class PaimonStatistics[T <: PaimonBaseScan](scan: T) extends Statistics {
 
   override def numRows(): OptionalLong = OptionalLong.of(rowCount)
 
-  // TODO: extend columnStats for CBO
+  override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+    val start = System.currentTimeMillis()
+    val requiredFields = scan.tableRowType.getFieldNames
+    val statsCollector = new FullTableStatsCollector(scan.tableRowType, requiredFields)
+
+    scan.getSplits.foreach(
+      split => {
+        split.asInstanceOf[DataSplit].dataFiles().forEach {
+          file => statsCollector.collect(file.valueStats())
+        }
+      })
+    val map = new java.util.HashMap[NamedReference, ColumnStatistics]()
+
+    statsCollector
+      .extract()
+      .forEach(
+        (field, stats) => {
+          map.put(
+            Utils.fieldReference(field.name()),
+            PaimonColumnStats(field.`type`(), stats, rowCount)
+          )
+        })
+
+    logWarning("程序运行时间：" + (System.currentTimeMillis() - start) + "ms")
+    map
+  }
+}
+
+case class PaimonColumnStats(
+    override val min: Optional[Object],
+    override val max: Optional[Object],
+    override val nullCount: OptionalLong,
+    override val distinctCount: OptionalLong,
+    override val avgLen: OptionalLong,
+    override val maxLen: OptionalLong)
+  extends ColumnStatistics
+
+object PaimonColumnStats {
+
+  def apply(
+      fieldType: DataType,
+      fullTableStats: FullTableStats,
+      rowCount: Long): PaimonColumnStats = {
+    val globalFieldStats = fullTableStats.tableLevelFieldStats()
+    val fileFieldStats = fullTableStats.fileLevelFieldStats()
+
+    PaimonColumnStats(
+      Optional.ofNullable(SparkInternalRow.fromPaimon(fileFieldStats.minValue(), fieldType)),
+      Optional.ofNullable(SparkInternalRow.fromPaimon(fileFieldStats.maxValue(), fieldType)),
+      OptionalUtils.of(fileFieldStats.nullCount()),
+      if (globalFieldStats.distinctRatio() == null) OptionalLong.empty()
+      else OptionalLong.of((globalFieldStats.distinctRatio() * rowCount).toLong),
+      OptionalUtils.of(globalFieldStats.avgLen()),
+      OptionalUtils.of(globalFieldStats.maxLen())
+    )
+  }
 }

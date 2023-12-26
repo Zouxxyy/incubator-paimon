@@ -16,32 +16,28 @@
  * limitations under the License.
  */
 
-package org.apache.paimon.format;
+package org.apache.paimon.stats;
 
-import org.apache.paimon.fs.FileIO;
-import org.apache.paimon.fs.Path;
-import org.apache.paimon.utils.Pair;
+import org.apache.paimon.format.FieldStats;
+import org.apache.paimon.types.DataFieldStats;
 
-import java.io.IOException;
+import javax.annotation.Nullable;
 
-/** Extracts statistics directly from file. */
-public interface TableStatsExtractor {
+/** All table stats, including table level field stats and file level field stats. */
+public class FullTableStats {
+    private final @Nullable DataFieldStats tableLevelFieldStats;
+    private final FieldStats fileLevelFieldStats;
 
-    FieldStats[] extract(FileIO fileIO, Path path) throws IOException;
+    public FullTableStats(@Nullable DataFieldStats globalFieldStats, FieldStats fileFieldStats) {
+        this.tableLevelFieldStats = globalFieldStats;
+        this.fileLevelFieldStats = fileFieldStats;
+    }
 
-    Pair<FieldStats[], FileInfo> extractWithFileInfo(FileIO fileIO, Path path) throws IOException;
+    public @Nullable DataFieldStats tableLevelFieldStats() {
+        return tableLevelFieldStats;
+    }
 
-    /** File info fetched from physical file. */
-    class FileInfo {
-
-        private final long rowCount;
-
-        public FileInfo(long rowCount) {
-            this.rowCount = rowCount;
-        }
-
-        public long getRowCount() {
-            return rowCount;
-        }
+    public FieldStats fileLevelFieldStats() {
+        return fileLevelFieldStats;
     }
 }

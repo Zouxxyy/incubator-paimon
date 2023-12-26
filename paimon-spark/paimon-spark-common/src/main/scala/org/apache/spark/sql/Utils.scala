@@ -18,8 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -67,5 +68,12 @@ object Utils {
 
   def bytesToString(size: Long): String = {
     SparkUtils.bytesToString(size)
+  }
+
+  def computeColumnStats(
+      sparkSession: SparkSession,
+      relation: LogicalPlan,
+      columns: Seq[Attribute]): (Long, Map[Attribute, ColumnStat]) = {
+    CommandUtils.computeColumnStats(sparkSession, relation, columns)
   }
 }

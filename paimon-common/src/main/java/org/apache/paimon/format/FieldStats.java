@@ -25,9 +25,9 @@ import java.util.Objects;
 /** Statistics for each field. */
 public class FieldStats {
 
-    @Nullable private final Object minValue;
-    @Nullable private final Object maxValue;
-    private final Long nullCount;
+    @Nullable private Object minValue;
+    @Nullable private Object maxValue;
+    private Long nullCount;
 
     public FieldStats(
             @Nullable Object minValue, @Nullable Object maxValue, @Nullable Long nullCount) {
@@ -49,6 +49,40 @@ public class FieldStats {
     @Nullable
     public Long nullCount() {
         return nullCount;
+    }
+
+    public static FieldStats empty() {
+        return new FieldStats(null, null, null);
+    }
+
+    public void merge(FieldStats other) {
+        if (other.minValue != null) {
+            if (this.minValue == null) {
+                this.minValue = other.minValue;
+            } else {
+                Comparable<Object> cl = (Comparable<Object>) this.minValue;
+                Comparable<Object> cr = (Comparable<Object>) other.minValue;
+                this.minValue = cl.compareTo(cr) < 0 ? cl : cr;
+            }
+        }
+
+        if (other.maxValue != null) {
+            if (this.maxValue == null) {
+                this.maxValue = other.maxValue;
+            } else {
+                Comparable<Object> cl = (Comparable<Object>) this.maxValue;
+                Comparable<Object> cr = (Comparable<Object>) other.maxValue;
+                this.maxValue = cl.compareTo(cr) > 0 ? cl : cr;
+            }
+        }
+
+        if (other.nullCount != null) {
+            if (this.nullCount == null) {
+                this.nullCount = other.nullCount;
+            } else {
+                this.nullCount += other.nullCount;
+            }
+        }
     }
 
     @Override
