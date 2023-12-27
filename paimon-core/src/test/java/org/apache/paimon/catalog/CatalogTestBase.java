@@ -27,6 +27,7 @@ import org.apache.paimon.schema.Schema;
 import org.apache.paimon.schema.SchemaChange;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataFieldStats;
 import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.RowType;
 
@@ -800,5 +801,34 @@ public abstract class CatalogTestBase {
                         anyCauseMatches(
                                 UnsupportedOperationException.class,
                                 "Cannot change nullability of primary key"));
+    }
+
+    @Test
+    public void testAlterTableUpdateColumnStats() throws Exception {
+        catalog.createDatabase("test_db", false);
+
+        Identifier identifier = Identifier.create("test_db", "test_table");
+        catalog.createTable(
+                identifier,
+                new Schema(
+                        Lists.newArrayList(
+                                new DataField(0, "col1", DataTypes.STRING(), "field1"),
+                                new DataField(1, "col2", DataTypes.STRING(), "field2")),
+                        Collections.emptyList(),
+                        Collections.emptyList(),
+                        Maps.newHashMap(),
+                        ""),
+                false);
+
+        catalog.alterTable(
+                identifier,
+                Lists.newArrayList(
+                        SchemaChange.updateColumnStats("col2", new DataFieldStats(1L, 2L, 3L, 4L))),
+                false);
+
+        Table table = catalog.getTable(identifier);
+        assertThat(table.rowType().getFields().get(0).stats()).isEqualTo(null);
+        assertThat(table.rowType().getFields().get(1).stats())
+                .isEqualTo(new DataFieldStats(1L, 2L, 3L, 4L));
     }
 }

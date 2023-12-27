@@ -17,11 +17,20 @@
  */
 package org.apache.paimon.spark
 
+import org.apache.paimon.types.DataFieldStats
+import org.apache.paimon.utils.OptionalUtils
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Utils
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.Statistics
+import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 
-import java.util.OptionalLong
+import java.util.{Optional, OptionalLong}
 
-case class PaimonStatistics[T <: PaimonBaseScan](scan: T) extends Statistics {
+import scala.collection.JavaConverters._
+
+case class PaimonStatistics[T <: PaimonBaseScan](scan: T) extends Statistics with Logging {
 
   private lazy val rowCount: Long = scan.getSplits.map(_.rowCount).sum
 
@@ -31,5 +40,35 @@ case class PaimonStatistics[T <: PaimonBaseScan](scan: T) extends Statistics {
 
   override def numRows(): OptionalLong = OptionalLong.of(rowCount)
 
-  // TODO: extend columnStats for CBO
+  override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+    val requiredFields = scan.readSchema().fieldNames.toList.asJava
+    val resultMap = new java.util.HashMap[NamedReference, ColumnStatistics]()
+    scan.tableRowType.getFields
+      .stream()
+      .filter(field => requiredFields.contains(field.name))
+      .forEach(f => resultMap.put(Utils.fieldReference(f.name()), PaimonColumnStats(f.stats())))
+    resultMap
+  }
+}
+
+case class PaimonColumnStats(
+    override val nullCount: OptionalLong,
+    override val min: Optional[Object],
+    override val max: Optional[Object],
+    override val distinctCount: OptionalLong,
+    override val avgLen: OptionalLong,
+    override val maxLen: OptionalLong)
+  extends ColumnStatistics
+
+object PaimonColumnStats {
+  def apply(stats: DataFieldStats): PaimonColumnStats = {
+    PaimonColumnStats(
+      OptionalUtils.of(stats.nullCount),
+      Optional.empty(),
+      Optional.empty(),
+      OptionalUtils.of(stats.distinctCount),
+      OptionalUtils.of(stats.avgLen),
+      OptionalUtils.of(stats.maxLen)
+    )
+  }
 }

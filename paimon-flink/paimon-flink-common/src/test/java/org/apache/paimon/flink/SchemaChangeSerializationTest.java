@@ -19,6 +19,7 @@
 package org.apache.paimon.flink;
 
 import org.apache.paimon.schema.SchemaChange;
+import org.apache.paimon.types.DataFieldStats;
 import org.apache.paimon.types.DataTypes;
 
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,7 @@ public class SchemaChangeSerializationTest {
         runTest(SchemaChange.updateColumnNullability(new String[] {"col1", "col2"}, true));
         runTest(SchemaChange.updateColumnComment(new String[] {"col1", "col2"}, "comment"));
         runTest(SchemaChange.updateColumnPosition(SchemaChange.Move.after("col", "ref")));
+        runTest(SchemaChange.updateColumnStats("col1", new DataFieldStats(1L, 2L, 3L, 4L)));
     }
 
     private void runTest(SchemaChange schemaChange) throws Exception {
