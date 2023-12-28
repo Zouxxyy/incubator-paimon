@@ -62,7 +62,7 @@ extractHostName() {
 }
 
 readWorkers() {
-    WORKERS_FILE="${FLINK_HOME}/conf/workers"
+    WORKERS_FILE="${FLINK_CONF_DIR}/workers"
 
     if [[ ! -f "$WORKERS_FILE" ]]; then
         echo "No workers file. Please specify workers in 'conf/workers'."

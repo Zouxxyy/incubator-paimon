@@ -1,0 +1,14 @@
+before: |
+  CREATE CATALOG paimon_catalog WITH (
+  'type' = 'paimon',
+  'warehouse' = 'hdfs:///user/hive/warehouse/benchmark_test/paimon'
+  );
+
+sink-name: paimon_catalog.`default`.`orders`
+
+sink-properties: |
+  'bucket' = '16',
+  'bucket-key' = 'order_id',
+  'file.format' = 'parquet',
+  'file.compression' = 'snappy',
+  'write-only' = 'true'

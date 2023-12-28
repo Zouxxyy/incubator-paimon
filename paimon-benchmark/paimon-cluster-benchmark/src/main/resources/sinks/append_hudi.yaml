@@ -1,0 +1,26 @@
+before: |
+  --
+sink-name: orders_append
+
+sink-properties: |
+  -- common conf
+  'connector' = 'hudi',
+  'path' = 'hdfs:///user/hive/warehouse/benchmark_test/hudi/orders_append',
+  'precombine.field' = 'order_update_time',
+  'table.type' = 'COPY_ON_WRITE',
+  'hoodie.database.name' = 'throughout_test',
+  'hoodie.table.name' = 'orders_append',
+  'hoodie.datasource.write.recordkey.field' = 'order_id',
+  'metadata.enabled' = 'false',
+  -- index conf
+  'index.type' = 'FLINK_STATE',
+  -- write conf
+  'write.operation' = 'insert',
+  'write.tasks' = '16',
+  'write.insert.cluster' = 'false',
+  'hoodie.parquet.compression.codec' = 'snappy',
+  -- read conf
+  'read.tasks' = '16',
+  -- clustering conf
+  'clustering.schedule.enabled' = 'false',
+  'clustering.async.enabled' = 'false'

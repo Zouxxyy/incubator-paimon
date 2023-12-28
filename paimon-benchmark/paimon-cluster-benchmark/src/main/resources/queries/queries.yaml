@@ -19,3 +19,11 @@
 q1:
   sql: [q1.sql]
   row-num: [500000000]
+
+upsert:
+  sql: [upsert.sql]
+  row-num: [500000000]
+
+append:
+  sql: [append.sql]
+  row-num: [500000000]

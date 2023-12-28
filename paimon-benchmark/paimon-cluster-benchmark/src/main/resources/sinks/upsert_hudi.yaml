@@ -1,0 +1,26 @@
+before: |
+  --
+sink-name: orders
+
+sink-properties: |
+  -- common conf
+  'connector' = 'hudi',
+  'path' = 'hdfs:///user/hive/warehouse/benchmark_test/hudi/orders',
+  'precombine.field' = 'order_update_time',
+  'table.type' = 'MERGE_ON_READ',
+  'hoodie.database.name' = 'throughout_test',
+  'hoodie.table.name' = 'orders',
+  'metadata.enabled' = 'false',
+  -- index conf
+  'index.type' = 'BUCKET',
+  'hoodie.bucket.index.num.buckets' = '16',
+  -- write conf
+  'write.operation' = 'upsert',
+  'write.tasks' = '16',
+  'hoodie.parquet.compression.codec' = 'snappy',
+  -- read conf
+  'read.tasks' = '16',
+  -- compaction conf
+  'compaction.schedule.enabled' = 'false',
+  'compaction.async.enabled' = 'false',
+  'compaction.max_memory' = '4096'
