@@ -20,6 +20,7 @@ package org.apache.paimon.spark.commands
 import org.apache.paimon.options.Options
 import org.apache.paimon.predicate.OnlyPartitionKeyEqualVisitor
 import org.apache.paimon.spark.{InsertInto, SparkTable}
+import org.apache.paimon.spark.catalyst.analysis.expressions.ExpressionHelper
 import org.apache.paimon.spark.leafnode.PaimonLeafRunnableCommand
 import org.apache.paimon.spark.schema.SparkSystemColumns.ROW_KIND_COL
 import org.apache.paimon.table.FileStoreTable
@@ -38,7 +39,8 @@ import scala.util.control.NonFatal
 
 case class DeleteFromPaimonTableCommand(v2Table: SparkTable, delete: DeleteFromTable)
   extends PaimonLeafRunnableCommand
-  with PaimonCommand {
+  with PaimonCommand
+  with ExpressionHelper {
 
   override def table: FileStoreTable = v2Table.getTable.asInstanceOf[FileStoreTable]
 
@@ -50,7 +52,9 @@ case class DeleteFromPaimonTableCommand(v2Table: SparkTable, delete: DeleteFromT
       (None, false)
     } else {
       try {
-        (Some(convertConditionToPaimonPredicate(condition, relation.output)), false)
+        (
+          Some(convertConditionToPaimonPredicate(condition, relation.output, table.rowType())),
+          false)
       } catch {
         case NonFatal(_) =>
           (None, true)

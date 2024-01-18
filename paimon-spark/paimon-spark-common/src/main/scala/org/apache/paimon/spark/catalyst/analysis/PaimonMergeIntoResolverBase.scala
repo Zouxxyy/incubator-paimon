@@ -36,7 +36,7 @@ trait PaimonMergeIntoResolverBase extends ExpressionHelper {
     val matched = merge.matchedActions
     val notMatched = merge.notMatchedActions
 
-    val resolve: (Expression, LogicalPlan) => Expression = resolveExpression(spark) _
+    val resolve: (Expression, LogicalPlan) => Expression = resolveExpression(spark)
 
     def resolveMergeAction(action: MergeAction): MergeAction = {
       action match {
