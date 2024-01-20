@@ -137,7 +137,8 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
     }
 
     /**
-     * Even for upgrade, we still need performing rewrite (except for {@link MergeEngine#DEDUPLICATE}).
+     * Even for upgrade, we still need performing rewrite (except for {@link
+     * MergeEngine#DEDUPLICATE}).
      */
     protected CompactResult upgradeWithChangelog(int outputLevel, DataFileMeta file)
             throws Exception {
