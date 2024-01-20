@@ -28,7 +28,6 @@ import org.apache.paimon.mergetree.MergeSorter;
 import org.apache.paimon.mergetree.SortedRun;
 import org.apache.paimon.utils.Preconditions;
 
-import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
 
@@ -58,7 +57,7 @@ public class FullChangelogMergeTreeCompactRewriter extends ChangelogMergeTreeRew
     }
 
     @Override
-    protected boolean rewriteChangelog(
+    protected boolean needRewriteWithChangelog(
             int outputLevel, boolean dropDelete, List<List<SortedRun>> sections) {
         boolean changelog = outputLevel == maxLevel;
         if (changelog) {
@@ -70,7 +69,7 @@ public class FullChangelogMergeTreeCompactRewriter extends ChangelogMergeTreeRew
     }
 
     @Override
-    protected boolean upgradeChangelog(int outputLevel, DataFileMeta file) {
+    protected boolean needUpgradeWithChangelog(int outputLevel, DataFileMeta file) {
         return outputLevel == maxLevel;
     }
 
@@ -79,7 +78,4 @@ public class FullChangelogMergeTreeCompactRewriter extends ChangelogMergeTreeRew
         return new FullChangelogMergeFunctionWrapper(
                 mfFactory.create(), maxLevel, valueEqualiser, changelogRowDeduplicate);
     }
-
-    @Override
-    public void close() throws IOException {}
 }

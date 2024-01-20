@@ -66,13 +66,13 @@ public class FirstRowMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter
     }
 
     @Override
-    protected boolean rewriteChangelog(
+    protected boolean needRewriteWithChangelog(
             int outputLevel, boolean dropDelete, List<List<SortedRun>> sections) {
         return rewriteLookupChangelog(outputLevel, sections);
     }
 
     @Override
-    protected boolean upgradeChangelog(int outputLevel, DataFileMeta file) {
+    protected boolean needUpgradeWithChangelog(int outputLevel, DataFileMeta file) {
         return file.level() == 0;
     }
 

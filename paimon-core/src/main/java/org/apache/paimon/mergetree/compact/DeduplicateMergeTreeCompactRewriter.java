@@ -18,30 +18,31 @@
 
 package org.apache.paimon.mergetree.compact;
 
+import org.apache.paimon.CoreOptions.MergeEngine;
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.codegen.RecordEqualiser;
+import org.apache.paimon.compact.CompactResult;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.KeyValueFileReaderFactory;
 import org.apache.paimon.io.KeyValueFileWriterFactory;
+import org.apache.paimon.io.RollingFileWriter;
 import org.apache.paimon.mergetree.LookupLevels;
 import org.apache.paimon.mergetree.MergeSorter;
+import org.apache.paimon.mergetree.MergeTreeReaders;
 import org.apache.paimon.mergetree.SortedRun;
+import org.apache.paimon.reader.RecordReader;
+import org.apache.paimon.reader.RecordReaderIterator;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
+import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
 
 /**
- * A {@link MergeTreeCompactRewriter} which produces changelog files by lookup for the compaction
- * involving level 0 files.
+ * A {@link MergeTreeCompactRewriter} for {@link MergeEngine#DEDUPLICATE}, when performing upgrade,
+ * can skip rewriting the data, only write changelog.
  */
-public class LookupMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter {
-
-    private final LookupLevels lookupLevels;
-
-    public LookupMergeTreeCompactRewriter(
+public class DeduplicateMergeTreeCompactRewriter extends LookupMergeTreeCompactRewriter {
+    public DeduplicateMergeTreeCompactRewriter(
             LookupLevels lookupLevels,
             KeyValueFileReaderFactory readerFactory,
             KeyValueFileWriterFactory writerFactory,
@@ -51,6 +52,7 @@ public class LookupMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter {
             RecordEqualiser valueEqualiser,
             boolean changelogRowDeduplicate) {
         super(
+                lookupLevels,
                 readerFactory,
                 writerFactory,
                 keyComparator,
@@ -58,37 +60,29 @@ public class LookupMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter {
                 mergeSorter,
                 valueEqualiser,
                 changelogRowDeduplicate);
-        this.lookupLevels = lookupLevels;
     }
 
+    /** Skip rewrite new file, only update file metadata, and produce changelog. */
     @Override
-    protected boolean needRewriteWithChangelog(
-            int outputLevel, boolean dropDelete, List<List<SortedRun>> sections) {
-        return rewriteLookupChangelog(outputLevel, sections);
-    }
+    protected CompactResult upgradeWithChangelog(int outputLevel, DataFileMeta file)
+            throws Exception {
+        RecordReader<ChangelogResult> sectionReader =
+                MergeTreeReaders.readerForSection(
+                        Collections.singletonList(SortedRun.fromSingle(file)),
+                        readerFactory,
+                        keyComparator,
+                        createMergeWrapper(outputLevel),
+                        mergeSorter);
 
-    @Override
-    protected boolean needUpgradeWithChangelog(int outputLevel, DataFileMeta file) {
-        return file.level() == 0;
-    }
-
-    @Override
-    protected MergeFunctionWrapper<ChangelogResult> createMergeWrapper(int outputLevel) {
-        return new LookupChangelogMergeFunctionWrapper(
-                mfFactory,
-                key -> {
-                    try {
-                        return lookupLevels.lookup(key, outputLevel + 1);
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
-                    }
-                },
-                valueEqualiser,
-                changelogRowDeduplicate);
-    }
-
-    @Override
-    public void close() throws IOException {
-        lookupLevels.close();
+        try (RecordReaderIterator<ChangelogResult> iterator =
+                        new RecordReaderIterator<>(sectionReader);
+                RollingFileWriter<KeyValue, DataFileMeta> changelogFileWriter =
+                        writerFactory.createRollingChangelogFileWriter(outputLevel)) {
+            while (iterator.hasNext()) {
+                ChangelogResult result = iterator.next();
+                changelogFileWriter.write(result.changelogs());
+            }
+            return new CompactResult(file, file.upgrade(outputLevel), changelogFileWriter.result());
+        }
     }
 }

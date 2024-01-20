@@ -64,18 +64,18 @@ public class MergeTreeCompactRewriter extends AbstractCompactRewriter {
 
     protected CompactResult rewriteCompaction(
             int outputLevel, boolean dropDelete, List<List<SortedRun>> sections) throws Exception {
-        RollingFileWriter<KeyValue, DataFileMeta> writer =
-                writerFactory.createRollingMergeTreeFileWriter(outputLevel);
-        RecordReader<KeyValue> sectionsReader =
-                MergeTreeReaders.readerForMergeTree(
-                        sections,
-                        dropDelete,
-                        readerFactory,
-                        keyComparator,
-                        mfFactory.create(),
-                        mergeSorter);
-        writer.write(new RecordReaderIterator<>(sectionsReader));
-        writer.close();
-        return new CompactResult(extractFilesFromSections(sections), writer.result());
+        try (RollingFileWriter<KeyValue, DataFileMeta> writer =
+                        writerFactory.createRollingMergeTreeFileWriter(outputLevel);
+                RecordReader<KeyValue> sectionsReader =
+                        MergeTreeReaders.readerForMergeTree(
+                                sections,
+                                dropDelete,
+                                readerFactory,
+                                keyComparator,
+                                mfFactory.create(),
+                                mergeSorter)) {
+            writer.write(new RecordReaderIterator<>(sectionsReader));
+            return new CompactResult(extractFilesFromSections(sections), writer.result());
+        }
     }
 }

@@ -43,7 +43,7 @@ public class RecordReaderIterator<T> implements CloseableIterator<T> {
 
     /**
      * <b>IMPORTANT</b>: Before calling this, make sure that the previous returned key-value is not
-     * used any more!
+     * used anymore!
      */
     @Override
     public boolean hasNext() {

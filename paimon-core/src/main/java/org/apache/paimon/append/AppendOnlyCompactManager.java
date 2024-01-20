@@ -57,7 +57,7 @@ public class AppendOnlyCompactManager extends CompactFutureManager {
     private final long targetFileSize;
     private final CompactRewriter rewriter;
 
-    private List<DataFileMeta> compacting;
+    @Nullable private List<DataFileMeta> compacting;
 
     @Nullable private final CompactionMetrics metrics;
 

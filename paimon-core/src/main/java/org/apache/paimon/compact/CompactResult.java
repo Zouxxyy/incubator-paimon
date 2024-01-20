@@ -43,6 +43,10 @@ public class CompactResult {
         this(before, after, Collections.emptyList());
     }
 
+    public CompactResult(DataFileMeta before, DataFileMeta after, List<DataFileMeta> changelog) {
+        this(Collections.singletonList(before), Collections.singletonList(after), changelog);
+    }
+
     public CompactResult(
             List<DataFileMeta> before, List<DataFileMeta> after, List<DataFileMeta> changelog) {
         this.before = new ArrayList<>(before);

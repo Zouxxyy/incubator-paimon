@@ -35,6 +35,8 @@ public interface CompactStrategy {
      *   <li>level 0 is special, one run per file; all other levels are one run per level.
      *   <li>compaction is sequential from small level to large level.
      * </ul>
+     *
+     * @return if CompactUnit is not empty, it must contain all runs in level 0.
      */
     Optional<CompactUnit> pick(int numLevels, List<LevelSortedRun> runs);
 

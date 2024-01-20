@@ -18,6 +18,7 @@
 
 package org.apache.paimon.mergetree.compact;
 
+import org.apache.paimon.CoreOptions.MergeEngine;
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.codegen.RecordEqualiser;
 import org.apache.paimon.compact.CompactResult;
@@ -36,7 +37,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/** A {@link MergeTreeCompactRewriter} which produces changelog files for the compaction. */
+/**
+ * A {@link MergeTreeCompactRewriter} which produces changelog files while performing compaction.
+ */
 public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewriter {
 
     protected final RecordEqualiser valueEqualiser;
@@ -55,10 +58,10 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
         this.changelogRowDeduplicate = changelogRowDeduplicate;
     }
 
-    protected abstract boolean rewriteChangelog(
+    protected abstract boolean needRewriteWithChangelog(
             int outputLevel, boolean dropDelete, List<List<SortedRun>> sections);
 
-    protected abstract boolean upgradeChangelog(int outputLevel, DataFileMeta file);
+    protected abstract boolean needUpgradeWithChangelog(int outputLevel, DataFileMeta file);
 
     protected abstract MergeFunctionWrapper<ChangelogResult> createMergeWrapper(int outputLevel);
 
@@ -82,15 +85,16 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
     @Override
     public CompactResult rewrite(
             int outputLevel, boolean dropDelete, List<List<SortedRun>> sections) throws Exception {
-        if (rewriteChangelog(outputLevel, dropDelete, sections)) {
-            return rewriteChangelogCompaction(outputLevel, sections);
+        if (needRewriteWithChangelog(outputLevel, dropDelete, sections)) {
+            return rewriteWithChangelog(outputLevel, sections);
         } else {
-            return rewriteCompaction(outputLevel, dropDelete, sections);
+            return super.rewrite(outputLevel, dropDelete, sections);
         }
     }
 
-    private CompactResult rewriteChangelogCompaction(
-            int outputLevel, List<List<SortedRun>> sections) throws Exception {
+    /** Rewrite and produce changelog at the same time. */
+    private CompactResult rewriteWithChangelog(int outputLevel, List<List<SortedRun>> sections)
+            throws Exception {
         List<ConcatRecordReader.ReaderSupplier<ChangelogResult>> sectionReaders = new ArrayList<>();
         for (List<SortedRun> section : sections) {
             sectionReaders.add(
@@ -103,51 +107,42 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
                                     mergeSorter));
         }
 
-        RecordReaderIterator<ChangelogResult> iterator = null;
-        RollingFileWriter<KeyValue, DataFileMeta> compactFileWriter = null;
-        RollingFileWriter<KeyValue, DataFileMeta> changelogFileWriter = null;
-
-        try {
-            iterator = new RecordReaderIterator<>(ConcatRecordReader.create(sectionReaders));
-            compactFileWriter = writerFactory.createRollingMergeTreeFileWriter(outputLevel);
-            changelogFileWriter = writerFactory.createRollingChangelogFileWriter(outputLevel);
-
+        try (RecordReaderIterator<ChangelogResult> iterator =
+                        new RecordReaderIterator<>(ConcatRecordReader.create(sectionReaders));
+                RollingFileWriter<KeyValue, DataFileMeta> compactFileWriter =
+                        writerFactory.createRollingMergeTreeFileWriter(outputLevel);
+                RollingFileWriter<KeyValue, DataFileMeta> changelogFileWriter =
+                        writerFactory.createRollingChangelogFileWriter(outputLevel)) {
             while (iterator.hasNext()) {
                 ChangelogResult result = iterator.next();
                 if (result.result() != null) {
                     compactFileWriter.write(result.result());
                 }
-                for (KeyValue kv : result.changelogs()) {
-                    changelogFileWriter.write(kv);
-                }
+                changelogFileWriter.write(result.changelogs());
             }
-        } finally {
-            if (iterator != null) {
-                iterator.close();
-            }
-            if (compactFileWriter != null) {
-                compactFileWriter.close();
-            }
-            if (changelogFileWriter != null) {
-                changelogFileWriter.close();
-            }
+            return new CompactResult(
+                    extractFilesFromSections(sections),
+                    compactFileWriter.result(),
+                    changelogFileWriter.result());
         }
-
-        return new CompactResult(
-                extractFilesFromSections(sections),
-                compactFileWriter.result(),
-                changelogFileWriter.result());
     }
 
     @Override
     public CompactResult upgrade(int outputLevel, DataFileMeta file) throws Exception {
-        if (upgradeChangelog(outputLevel, file)) {
-            return rewriteChangelogCompaction(
-                    outputLevel,
-                    Collections.singletonList(
-                            Collections.singletonList(SortedRun.fromSingle(file))));
+        if (needUpgradeWithChangelog(outputLevel, file)) {
+            return upgradeWithChangelog(outputLevel, file);
         } else {
             return super.upgrade(outputLevel, file);
         }
+    }
+
+    /**
+     * Even for upgrade, we still need performing rewrite (except for {@link MergeEngine#DEDUPLICATE}).
+     */
+    protected CompactResult upgradeWithChangelog(int outputLevel, DataFileMeta file)
+            throws Exception {
+        return rewriteWithChangelog(
+                outputLevel,
+                Collections.singletonList(Collections.singletonList(SortedRun.fromSingle(file))));
     }
 }

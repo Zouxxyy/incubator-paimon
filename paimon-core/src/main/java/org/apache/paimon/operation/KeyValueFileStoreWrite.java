@@ -42,6 +42,7 @@ import org.apache.paimon.mergetree.MergeSorter;
 import org.apache.paimon.mergetree.MergeTreeWriter;
 import org.apache.paimon.mergetree.compact.CompactRewriter;
 import org.apache.paimon.mergetree.compact.CompactStrategy;
+import org.apache.paimon.mergetree.compact.DeduplicateMergeTreeCompactRewriter;
 import org.apache.paimon.mergetree.compact.FirstRowMergeTreeCompactRewriter;
 import org.apache.paimon.mergetree.compact.ForceUpLevel0Compaction;
 import org.apache.paimon.mergetree.compact.FullChangelogMergeTreeCompactRewriter;
@@ -226,33 +227,43 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                         valueEqualiserSupplier.get(),
                         options.changelogRowDeduplicate());
             case LOOKUP:
-                if (options.mergeEngine() == CoreOptions.MergeEngine.FIRST_ROW) {
-                    KeyValueFileReaderFactory keyOnlyReader =
-                            readerFactoryBuilder
-                                    .copyWithoutProjection()
-                                    .withValueProjection(new int[0][])
-                                    .build(partition, bucket);
-                    ContainsLevels containsLevels = createContainsLevels(levels, keyOnlyReader);
-                    return new FirstRowMergeTreeCompactRewriter(
-                            containsLevels,
-                            readerFactory,
-                            writerFactory,
-                            keyComparator,
-                            mfFactory,
-                            mergeSorter,
-                            valueEqualiserSupplier.get(),
-                            options.changelogRowDeduplicate());
+                switch (options.mergeEngine()) {
+                    case FIRST_ROW:
+                        KeyValueFileReaderFactory keyOnlyReader =
+                                readerFactoryBuilder
+                                        .copyWithoutProjection()
+                                        .withValueProjection(new int[0][])
+                                        .build(partition, bucket);
+                        return new FirstRowMergeTreeCompactRewriter(
+                                createContainsLevels(levels, keyOnlyReader),
+                                readerFactory,
+                                writerFactory,
+                                keyComparator,
+                                mfFactory,
+                                mergeSorter,
+                                valueEqualiserSupplier.get(),
+                                options.changelogRowDeduplicate());
+                    case DEDUPLICATE:
+                        return new DeduplicateMergeTreeCompactRewriter(
+                                createLookupLevels(levels, readerFactory),
+                                readerFactory,
+                                writerFactory,
+                                keyComparator,
+                                mfFactory,
+                                mergeSorter,
+                                valueEqualiserSupplier.get(),
+                                options.changelogRowDeduplicate());
+                    default:
+                        return new LookupMergeTreeCompactRewriter(
+                                createLookupLevels(levels, readerFactory),
+                                readerFactory,
+                                writerFactory,
+                                keyComparator,
+                                mfFactory,
+                                mergeSorter,
+                                valueEqualiserSupplier.get(),
+                                options.changelogRowDeduplicate());
                 }
-                LookupLevels lookupLevels = createLookupLevels(levels, readerFactory);
-                return new LookupMergeTreeCompactRewriter(
-                        lookupLevels,
-                        readerFactory,
-                        writerFactory,
-                        keyComparator,
-                        mfFactory,
-                        mergeSorter,
-                        valueEqualiserSupplier.get(),
-                        options.changelogRowDeduplicate());
             default:
                 return new MergeTreeCompactRewriter(
                         readerFactory, writerFactory, keyComparator, mfFactory, mergeSorter);

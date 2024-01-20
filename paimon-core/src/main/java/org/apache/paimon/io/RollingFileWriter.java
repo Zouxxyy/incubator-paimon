@@ -131,6 +131,11 @@ public class RollingFileWriter<T, R> implements FileWriter<T, List<R>> {
 
     @Override
     public List<R> result() {
+        try {
+            close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         Preconditions.checkState(closed, "Cannot access the results unless close all writers.");
         return results;
     }

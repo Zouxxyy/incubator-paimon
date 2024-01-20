@@ -22,6 +22,7 @@ import org.apache.paimon.annotation.VisibleForTesting;
 import org.apache.paimon.compact.CompactUnit;
 import org.apache.paimon.mergetree.LevelSortedRun;
 import org.apache.paimon.mergetree.SortedRun;
+import org.apache.paimon.utils.Preconditions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -202,6 +203,12 @@ public class UniversalCompaction implements CompactStrategy {
             outputLevel = maxLevel;
         }
 
+        if (runCount > 0) {
+            Preconditions.checkState(outputLevel > 0, "output level must be greater than 0");
+            Preconditions.checkState(
+                    runCount == runs.size() || runs.get(runCount).level() > 0,
+                    "next run's level must be greater than 0 (all files in level 0 must be picked");
+        }
         return CompactUnit.fromLevelRuns(outputLevel, runs.subList(0, runCount));
     }
 
