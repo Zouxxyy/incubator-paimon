@@ -49,6 +49,12 @@ under the License.
         </dependency>
 
         <dependency>
+            <groupId>org.roaringbitmap</groupId>
+            <artifactId>RoaringBitmap</artifactId>
+            <version>1.0.1</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-shade-jackson-2</artifactId>
             <version>${paimon.shade.jackson.version}-${paimon.shade.version}</version>
