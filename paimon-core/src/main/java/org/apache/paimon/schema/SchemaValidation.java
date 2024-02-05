@@ -217,6 +217,10 @@ public class SchemaValidation {
                                 schema.primaryKeys(), schema.partitionKeys()));
             }
         }
+
+        if (options.deleteMapEnabled()) {
+            validateForDeleteMap(options);
+        }
     }
 
     private static void validateOnlyContainPrimitiveType(
@@ -467,6 +471,13 @@ public class SchemaValidation {
                             e);
                 }
             }
+        }
+    }
+
+    private static void validateForDeleteMap(CoreOptions options) {
+        if (!options.formatType().equals(CoreOptions.FileFormatType.PARQUET)) {
+            throw new IllegalArgumentException(
+                    "Delete map is only supported for parquet file format now.");
         }
     }
 }

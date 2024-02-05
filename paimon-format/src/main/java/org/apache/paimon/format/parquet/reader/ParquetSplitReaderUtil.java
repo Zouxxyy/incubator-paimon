@@ -185,6 +185,11 @@ public class ParquetSplitReaderUtil {
         }
     }
 
+    @SuppressWarnings("rawtypes")
+    public static ColumnReader createPositionColumnReader(long startPosition) {
+        return new PositionColumnReader(startPosition);
+    }
+
     public static WritableColumnVector createWritableColumnVector(
             int batchSize,
             DataType fieldType,

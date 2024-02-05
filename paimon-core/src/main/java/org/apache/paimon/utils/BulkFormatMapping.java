@@ -105,18 +105,25 @@ public class BulkFormatMapping {
         }
 
         public BulkFormatMapping build(
-                String formatIdentifier, TableSchema tableSchema, TableSchema dataSchema) {
+                String formatIdentifier,
+                TableSchema tableSchema,
+                TableSchema dataSchema,
+                boolean deleteMapEnabled) {
             List<DataField> tableKeyFields = extractor.keyFields(tableSchema);
             List<DataField> tableValueFields = extractor.valueFields(tableSchema);
             int[][] tableProjection =
-                    KeyValue.project(keyProjection, valueProjection, tableKeyFields.size());
+                    KeyValue.project(
+                            keyProjection,
+                            valueProjection,
+                            tableKeyFields.size(),
+                            deleteMapEnabled);
 
             List<DataField> dataKeyFields = extractor.keyFields(dataSchema);
             List<DataField> dataValueFields = extractor.valueFields(dataSchema);
 
             RowType keyType = new RowType(dataKeyFields);
             RowType valueType = new RowType(dataValueFields);
-            RowType dataRecordType = KeyValue.schema(keyType, valueType);
+            RowType dataRecordType = KeyValue.schema(keyType, valueType, deleteMapEnabled);
 
             int[][] dataKeyProjection =
                     SchemaEvolutionUtil.createDataProjection(
@@ -125,7 +132,11 @@ public class BulkFormatMapping {
                     SchemaEvolutionUtil.createDataProjection(
                             tableValueFields, dataValueFields, valueProjection);
             int[][] dataProjection =
-                    KeyValue.project(dataKeyProjection, dataValueProjection, dataKeyFields.size());
+                    KeyValue.project(
+                            dataKeyProjection,
+                            dataValueProjection,
+                            dataKeyFields.size(),
+                            deleteMapEnabled);
 
             /*
              * We need to create index mapping on projection instead of key and value separately
@@ -156,7 +167,8 @@ public class BulkFormatMapping {
                             tableValueFields,
                             Projection.of(dataProjection).toTopLevelIndexes(),
                             dataKeyFields,
-                            dataValueFields);
+                            dataValueFields,
+                            deleteMapEnabled);
 
             List<Predicate> dataFilters =
                     tableSchema.id() == dataSchema.id()

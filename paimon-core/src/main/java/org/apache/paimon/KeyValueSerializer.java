@@ -44,20 +44,27 @@ public class KeyValueSerializer extends ObjectSerializer<KeyValue> {
     private final OffsetRow reusedKey;
     private final OffsetRow reusedValue;
     private final KeyValue reusedKv;
+    private final boolean withPosition;
 
     public KeyValueSerializer(RowType keyType, RowType valueType) {
-        super(KeyValue.schema(keyType, valueType));
+        this(keyType, valueType, false);
+    }
+
+    public KeyValueSerializer(RowType keyType, RowType valueType, boolean withPosition) {
+        super(KeyValue.schema(keyType, valueType, withPosition));
 
         this.keyArity = keyType.getFieldCount();
         int valueArity = valueType.getFieldCount();
 
-        this.reusedMeta = new GenericRow(2);
+        this.reusedMeta = new GenericRow(withPosition ? 3 : 2);
         this.reusedKeyWithMeta = new JoinedRow();
         this.reusedRow = new JoinedRow();
 
         this.reusedKey = new OffsetRow(keyArity, 0);
-        this.reusedValue = new OffsetRow(valueArity, keyArity + 2);
+        this.reusedValue = new OffsetRow(valueArity, keyArity + (withPosition ? 3 : 2));
         this.reusedKv = new KeyValue().replace(reusedKey, -1, null, reusedValue);
+
+        this.withPosition = withPosition;
     }
 
     @Override
@@ -79,6 +86,9 @@ public class KeyValueSerializer extends ObjectSerializer<KeyValue> {
         long sequenceNumber = row.getLong(keyArity);
         RowKind valueKind = RowKind.fromByteValue(row.getByte(keyArity + 1));
         reusedKv.replace(reusedKey, sequenceNumber, valueKind, reusedValue);
+        if (withPosition) {
+            reusedKv.setPosition(row.getLong(keyArity + 2));
+        }
         return reusedKv;
     }
 

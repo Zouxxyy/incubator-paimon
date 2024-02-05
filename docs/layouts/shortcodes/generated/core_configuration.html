@@ -159,6 +159,12 @@ under the License.
             <td>Whether to ignore delete records in deduplicate mode.</td>
         </tr>
         <tr>
+            <td><h5>delete-map.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Whether to enable delete map.</td>
+        </tr>
+        <tr>
             <td><h5>dynamic-bucket.assigner-parallelism</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>Integer</td>
@@ -576,6 +582,12 @@ This config option does not affect the default filesystem metastore.</td>
             <td>The maximum time of completed snapshots to retain.</td>
         </tr>
         <tr>
+            <td><h5>snapshot.watermark-idle-timeout</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>Duration</td>
+            <td>In watermarking, if a source remains idle beyond the specified timeout duration, it triggers snapshot advancement and facilitates tag creation.</td>
+        </tr>
+        <tr>
             <td><h5>sort-engine</h5></td>
             <td style="word-wrap: break-word;">loser-tree</td>
             <td><p>Enum</p></td>
@@ -652,12 +664,6 @@ This config option does not affect the default filesystem metastore.</td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>Integer</td>
             <td>The maximum number of tags to retain.</td>
-        </tr>
-        <tr>
-            <td><h5>snapshot.watermark-idle-timeout</h5></td>
-            <td style="word-wrap: break-word;">(none)</td>
-            <td>Duration</td>
-            <td>In watermarking, if a source remains idle beyond the specified timeout duration, it triggers snapshot advancement and facilitates tag creation.</td>
         </tr>
         <tr>
             <td><h5>tag.period-formatter</h5></td>

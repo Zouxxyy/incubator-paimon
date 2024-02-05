@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.apache.paimon.schema.SystemColumns.POSITION;
 import static org.apache.paimon.schema.SystemColumns.SEQUENCE_NUMBER;
 import static org.apache.paimon.schema.SystemColumns.VALUE_KIND;
 import static org.apache.paimon.utils.Preconditions.checkState;
@@ -53,6 +54,7 @@ public class KeyValue {
     private InternalRow value;
     // determined after read from file
     private int level;
+    private long position;
 
     public KeyValue replace(InternalRow key, RowKind valueKind, InternalRow value) {
         return replace(key, UNKNOWN_SEQUENCE, valueKind, value);
@@ -112,10 +114,26 @@ public class KeyValue {
         return this;
     }
 
+    public long position() {
+        return position;
+    }
+
+    public KeyValue setPosition(long position) {
+        this.position = position;
+        return this;
+    }
+
     public static RowType schema(RowType keyType, RowType valueType) {
+        return schema(keyType, valueType, false);
+    }
+
+    public static RowType schema(RowType keyType, RowType valueType, boolean withPosition) {
         List<DataField> fields = new ArrayList<>(keyType.getFields());
         fields.add(new DataField(0, SEQUENCE_NUMBER, new BigIntType(false)));
         fields.add(new DataField(1, VALUE_KIND, new TinyIntType(false)));
+        if (withPosition) {
+            fields.add(new DataField(2, POSITION, new BigIntType(false)));
+        }
         fields.addAll(valueType.getFields());
         return new RowType(fields);
     }
@@ -145,7 +163,10 @@ public class KeyValue {
      * @return the table fields
      */
     public static List<DataField> createKeyValueFields(
-            List<DataField> keyFields, List<DataField> valueFields, final int maxKeyId) {
+            List<DataField> keyFields,
+            List<DataField> valueFields,
+            final int maxKeyId,
+            boolean withPosition) {
         checkState(maxKeyId >= keyFields.stream().mapToInt(DataField::id).max().orElse(0));
 
         List<DataField> fields = new ArrayList<>(keyFields.size() + valueFields.size() + 2);
@@ -158,10 +179,19 @@ public class KeyValue {
         fields.add(
                 new DataField(
                         maxKeyId + 2, VALUE_KIND, new org.apache.paimon.types.TinyIntType(false)));
+
+        if (withPosition) {
+            fields.add(
+                    new DataField(
+                            maxKeyId + 3, POSITION, new org.apache.paimon.types.BigIntType(false)));
+        }
+
+        int valueStart = withPosition ? 4 : 3;
+
         for (DataField valueField : valueFields) {
             DataField newValueField =
                     new DataField(
-                            valueField.id() + maxKeyId + 3,
+                            valueField.id() + maxKeyId + valueStart,
                             valueField.name(),
                             valueField.type(),
                             valueField.description());
@@ -173,7 +203,17 @@ public class KeyValue {
 
     public static int[][] project(
             int[][] keyProjection, int[][] valueProjection, int numKeyFields) {
-        int[][] projection = new int[keyProjection.length + 2 + valueProjection.length][];
+        return project(keyProjection, valueProjection, numKeyFields, false);
+    }
+
+    public static int[][] project(
+            int[][] keyProjection,
+            int[][] valueProjection,
+            int numKeyFields,
+            boolean withPosition) {
+        int valueStart = withPosition ? 3 : 2;
+
+        int[][] projection = new int[keyProjection.length + valueStart + valueProjection.length][];
 
         // key
         for (int i = 0; i < keyProjection.length; i++) {
@@ -187,12 +227,17 @@ public class KeyValue {
         // value kind
         projection[keyProjection.length + 1] = new int[] {numKeyFields + 1};
 
+        // position
+        if (withPosition) {
+            projection[keyProjection.length + 2] = new int[] {numKeyFields + 2};
+        }
+
         // value
         for (int i = 0; i < valueProjection.length; i++) {
-            int idx = keyProjection.length + 2 + i;
+            int idx = keyProjection.length + valueStart + i;
             projection[idx] = new int[valueProjection[i].length];
             System.arraycopy(valueProjection[i], 0, projection[idx], 0, valueProjection[i].length);
-            projection[idx][0] += numKeyFields + 2;
+            projection[idx][0] += numKeyFields + valueStart;
         }
 
         return projection;

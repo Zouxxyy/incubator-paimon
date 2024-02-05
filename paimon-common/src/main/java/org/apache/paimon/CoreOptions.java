@@ -1071,6 +1071,12 @@ public class CoreOptions implements Serializable {
                     .defaultValue(MemorySize.ofMebiBytes(10))
                     .withDescription("The threshold for read file async.");
 
+    public static final ConfigOption<Boolean> DELETE_MAP_ENABLED =
+            key("delete-map.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("Whether to enable delete map.");
+
     private final Options options;
 
     public CoreOptions(Map<String, String> options) {
@@ -1618,6 +1624,10 @@ public class CoreOptions implements Serializable {
 
     public int varTypeSize() {
         return options.get(ZORDER_VAR_LENGTH_CONTRIBUTION);
+    }
+
+    public boolean deleteMapEnabled() {
+        return options.get(DELETE_MAP_ENABLED);
     }
 
     /** Specifies the merge engine for table with primary key. */

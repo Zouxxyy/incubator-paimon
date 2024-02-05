@@ -59,6 +59,7 @@ public class KeyValueFileReaderFactory {
 
     private final Map<FormatKey, BulkFormatMapping> bulkFormatMappings;
     private final BinaryRow partition;
+    private final boolean deleteMapEnabled;
 
     private KeyValueFileReaderFactory(
             FileIO fileIO,
@@ -69,7 +70,8 @@ public class KeyValueFileReaderFactory {
             BulkFormatMapping.BulkFormatMappingBuilder bulkFormatMappingBuilder,
             DataFilePathFactory pathFactory,
             long asyncThreshold,
-            BinaryRow partition) {
+            BinaryRow partition,
+            boolean deleteMapEnabled) {
         this.fileIO = fileIO;
         this.schemaManager = schemaManager;
         this.schemaId = schemaId;
@@ -80,6 +82,7 @@ public class KeyValueFileReaderFactory {
         this.asyncThreshold = asyncThreshold;
         this.partition = partition;
         this.bulkFormatMappings = new HashMap<>();
+        this.deleteMapEnabled = deleteMapEnabled;
     }
 
     public RecordReader<KeyValue> createRecordReader(
@@ -105,7 +108,8 @@ public class KeyValueFileReaderFactory {
                         bulkFormatMappingBuilder.build(
                                 formatIdentifier,
                                 schemaManager.schema(this.schemaId),
-                                schemaManager.schema(schemaId));
+                                schemaManager.schema(schemaId),
+                                deleteMapEnabled);
 
         BulkFormatMapping bulkFormatMapping =
                 reuseFormat
@@ -123,7 +127,8 @@ public class KeyValueFileReaderFactory {
                 poolSize,
                 bulkFormatMapping.getIndexMapping(),
                 bulkFormatMapping.getCastMapping(),
-                PartitionUtils.create(bulkFormatMapping.getPartitionPair(), partition));
+                PartitionUtils.create(bulkFormatMapping.getPartitionPair(), partition),
+                deleteMapEnabled);
     }
 
     public static Builder builder(
@@ -248,7 +253,8 @@ public class KeyValueFileReaderFactory {
                             formatDiscover, extractor, keyProjection, valueProjection, filters),
                     pathFactory.createDataFilePathFactory(partition, bucket),
                     options.fileReaderAsyncThreshold().getBytes(),
-                    partition);
+                    partition,
+                    options.deleteMapEnabled());
         }
 
         private void applyProjection() {

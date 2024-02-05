@@ -215,15 +215,18 @@ public class SchemaEvolutionUtil {
             List<DataField> tableValueFields,
             int[] dataProjection,
             List<DataField> dataKeyFields,
-            List<DataField> dataValueFields) {
+            List<DataField> dataValueFields,
+            boolean withPosition) {
         int maxKeyId =
                 Math.max(
                         tableKeyFields.stream().mapToInt(DataField::id).max().orElse(0),
                         dataKeyFields.stream().mapToInt(DataField::id).max().orElse(0));
         List<DataField> tableFields =
-                KeyValue.createKeyValueFields(tableKeyFields, tableValueFields, maxKeyId);
+                KeyValue.createKeyValueFields(
+                        tableKeyFields, tableValueFields, maxKeyId, withPosition);
         List<DataField> dataFields =
-                KeyValue.createKeyValueFields(dataKeyFields, dataValueFields, maxKeyId);
+                KeyValue.createKeyValueFields(
+                        dataKeyFields, dataValueFields, maxKeyId, withPosition);
         return createIndexCastMapping(tableProjection, tableFields, dataProjection, dataFields);
     }
 

@@ -58,6 +58,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.apache.paimon.format.parquet.reader.ParquetSplitReaderUtil.createColumnReader;
+import static org.apache.paimon.format.parquet.reader.ParquetSplitReaderUtil.createPositionColumnReader;
 import static org.apache.paimon.format.parquet.reader.ParquetSplitReaderUtil.createWritableColumnVector;
 import static org.apache.parquet.hadoop.UnmaterializableRecordCounter.BAD_RECORD_THRESHOLD_CONF_KEY;
 
@@ -138,7 +139,10 @@ public class ParquetReaderFactory implements FormatReaderFactory {
         Type[] types = new Type[projectedFields.length];
         for (int i = 0; i < projectedFields.length; ++i) {
             String fieldName = projectedFields[i];
-            if (!parquetSchema.containsField(fieldName)) {
+            if (fieldName.equals("_POSITION")) {
+                types[i] =
+                        ParquetSchemaConverter.convertToParquetType(fieldName, projectedTypes[i]);
+            } else if (!parquetSchema.containsField(fieldName)) {
                 LOG.warn(
                         "{} does not exist in {}, will fill the field with null.",
                         fieldName,
@@ -333,13 +337,17 @@ public class ParquetReaderFactory implements FormatReaderFactory {
             columnReaders = new ColumnReader[types.size()];
             for (int i = 0; i < types.size(); ++i) {
                 if (!unknownFieldsIndices.contains(i)) {
-                    columnReaders[i] =
-                            createColumnReader(
-                                    projectedTypes[i],
-                                    types.get(i),
-                                    requestedSchema.getColumns(),
-                                    pages,
-                                    0);
+                    if (types.get(i).getName().equals("_POSITION")) {
+                        columnReaders[i] = createPositionColumnReader(totalCountLoadedSoFar);
+                    } else {
+                        columnReaders[i] =
+                                createColumnReader(
+                                        projectedTypes[i],
+                                        types.get(i),
+                                        requestedSchema.getColumns(),
+                                        pages,
+                                        0);
+                    }
                 }
             }
             totalCountLoadedSoFar += pages.getRowCount();
