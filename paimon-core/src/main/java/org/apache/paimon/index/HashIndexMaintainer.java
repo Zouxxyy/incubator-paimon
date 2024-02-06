@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** An {@link IndexMaintainer} for dynamic bucket to maintain key hashcode in a bucket. */
-public class HashIndexMaintainer implements IndexMaintainer<KeyValue> {
+public class HashIndexMaintainer implements IndexMaintainer<KeyValue, IntHashSet> {
 
     private final IndexFileHandler fileHandler;
     private final IntHashSet hashcode;
@@ -105,7 +105,7 @@ public class HashIndexMaintainer implements IndexMaintainer<KeyValue> {
     }
 
     /** Factory to restore {@link HashIndexMaintainer}. */
-    public static class Factory implements IndexMaintainer.Factory<KeyValue> {
+    public static class Factory implements IndexMaintainer.Factory<KeyValue, IntHashSet> {
 
         private final IndexFileHandler handler;
 
@@ -114,7 +114,7 @@ public class HashIndexMaintainer implements IndexMaintainer<KeyValue> {
         }
 
         @Override
-        public IndexMaintainer<KeyValue> createOrRestore(
+        public IndexMaintainer<KeyValue, IntHashSet> createOrRestore(
                 @Nullable Long snapshotId, BinaryRow partition, int bucket) {
             return new HashIndexMaintainer(handler, snapshotId, partition, bucket);
         }

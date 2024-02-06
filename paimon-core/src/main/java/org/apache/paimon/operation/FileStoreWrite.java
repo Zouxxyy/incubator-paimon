@@ -29,6 +29,7 @@ import org.apache.paimon.metrics.MetricRegistry;
 import org.apache.paimon.table.sink.CommitMessage;
 import org.apache.paimon.table.sink.SinkRecord;
 import org.apache.paimon.utils.CommitIncrement;
+import org.apache.paimon.utils.IntHashSet;
 import org.apache.paimon.utils.RecordWriter;
 import org.apache.paimon.utils.Restorable;
 
@@ -145,7 +146,7 @@ public interface FileStoreWrite<T> extends Restorable<List<FileStoreWrite.State<
         protected final long baseSnapshotId;
         protected final long lastModifiedCommitIdentifier;
         protected final List<DataFileMeta> dataFiles;
-        @Nullable protected final IndexMaintainer<T> indexMaintainer;
+        @Nullable protected final IndexMaintainer<T, IntHashSet> indexMaintainer;
         protected final CommitIncrement commitIncrement;
 
         protected State(
@@ -154,7 +155,7 @@ public interface FileStoreWrite<T> extends Restorable<List<FileStoreWrite.State<
                 long baseSnapshotId,
                 long lastModifiedCommitIdentifier,
                 Collection<DataFileMeta> dataFiles,
-                @Nullable IndexMaintainer<T> indexMaintainer,
+                @Nullable IndexMaintainer<T, IntHashSet> indexMaintainer,
                 CommitIncrement commitIncrement) {
             this.partition = partition;
             this.bucket = bucket;

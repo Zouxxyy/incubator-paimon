@@ -55,6 +55,7 @@ public class KeyValue {
     // determined after read from file
     private int level;
     private long position;
+    private String fileName;
 
     public KeyValue replace(InternalRow key, RowKind valueKind, InternalRow value) {
         return replace(key, UNKNOWN_SEQUENCE, valueKind, value);
@@ -120,6 +121,15 @@ public class KeyValue {
 
     public KeyValue setPosition(long position) {
         this.position = position;
+        return this;
+    }
+
+    public String fileName() {
+        return fileName;
+    }
+
+    public KeyValue setFileName(String fileName) {
+        this.fileName = fileName;
         return this;
     }
 

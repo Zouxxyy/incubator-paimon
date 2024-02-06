@@ -22,6 +22,7 @@ import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.index.HashIndexFile;
 import org.apache.paimon.index.IndexFileHandler;
+import org.apache.paimon.index.delete.DeleteMapIndexFile;
 import org.apache.paimon.manifest.IndexManifestFile;
 import org.apache.paimon.manifest.ManifestFile;
 import org.apache.paimon.manifest.ManifestList;
@@ -141,7 +142,8 @@ public abstract class AbstractFileStore<T> implements FileStore<T> {
         return new IndexFileHandler(
                 snapshotManager(),
                 indexManifestFileFactory().create(),
-                new HashIndexFile(fileIO, pathFactory().indexFileFactory()));
+                new HashIndexFile(fileIO, pathFactory().indexFileFactory()),
+                new DeleteMapIndexFile(fileIO, pathFactory().indexFileFactory()));
     }
 
     @Override

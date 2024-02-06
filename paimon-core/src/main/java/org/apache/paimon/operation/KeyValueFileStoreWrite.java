@@ -56,6 +56,7 @@ import org.apache.paimon.schema.SchemaManager;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.CommitIncrement;
 import org.apache.paimon.utils.FileStorePathFactory;
+import org.apache.paimon.utils.IntHashSet;
 import org.apache.paimon.utils.SnapshotManager;
 
 import org.slf4j.Logger;
@@ -101,7 +102,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
             Map<String, FileStorePathFactory> format2PathFactory,
             SnapshotManager snapshotManager,
             FileStoreScan scan,
-            @Nullable IndexMaintainer.Factory<KeyValue> indexFactory,
+            @Nullable IndexMaintainer.Factory<KeyValue, IntHashSet> indexFactory,
             CoreOptions options,
             KeyValueFieldsExtractor extractor,
             String tableName) {

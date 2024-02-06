@@ -20,6 +20,8 @@ package org.apache.paimon.index;
 
 import org.apache.paimon.Snapshot;
 import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.index.delete.DeleteIndex;
+import org.apache.paimon.index.delete.DeleteMapIndexFile;
 import org.apache.paimon.manifest.IndexManifestEntry;
 import org.apache.paimon.manifest.IndexManifestFile;
 import org.apache.paimon.utils.IntIterator;
@@ -30,9 +32,11 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.apache.paimon.index.HashIndexFile.HASH_INDEX;
+import static org.apache.paimon.index.delete.DeleteMapIndexFile.DELETE_MAP_INDEX;
 
 /** Handle index files. */
 public class IndexFileHandler {
@@ -40,14 +44,17 @@ public class IndexFileHandler {
     private final SnapshotManager snapshotManager;
     private final IndexManifestFile indexManifestFile;
     private final HashIndexFile hashIndex;
+    private final DeleteMapIndexFile deleteMapIndex;
 
     public IndexFileHandler(
             SnapshotManager snapshotManager,
             IndexManifestFile indexManifestFile,
-            HashIndexFile hashIndex) {
+            HashIndexFile hashIndex,
+            DeleteMapIndexFile deleteMapIndex) {
         this.snapshotManager = snapshotManager;
         this.indexManifestFile = indexManifestFile;
         this.hashIndex = hashIndex;
+        this.deleteMapIndex = deleteMapIndex;
     }
 
     public Optional<IndexFileMeta> scan(
@@ -147,5 +154,40 @@ public class IndexFileHandler {
 
     public void deleteManifest(String indexManifest) {
         indexManifestFile.delete(indexManifest);
+    }
+
+    public IndexFileMeta writeDeleteMapIndex(Map<String, DeleteIndex> deleteMap) {
+        String file;
+        try {
+            file = deleteMapIndex.write(deleteMap);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return new IndexFileMeta(
+                DELETE_MAP_INDEX, file, deleteMapIndex.fileSize(file), deleteMap.size());
+    }
+
+    public Map<String, DeleteIndex> readDeleteMapIndex(IndexFileMeta deleteMapFile) {
+        if (!deleteMapFile.indexType().equals(DELETE_MAP_INDEX)) {
+            throw new IllegalArgumentException(
+                    "Input file is not delete map index: " + deleteMapFile.indexType());
+        }
+        try {
+            return deleteMapIndex.read(deleteMapFile.fileName());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public Optional<DeleteIndex> readDeleteIndex(IndexFileMeta deleteMapFile, String fileName) {
+        if (!deleteMapFile.indexType().equals(DELETE_MAP_INDEX)) {
+            throw new IllegalArgumentException(
+                    "Input file is not delete map index" + deleteMapFile.indexType());
+        }
+        try {
+            return deleteMapIndex.read(deleteMapFile.fileName(), fileName);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }

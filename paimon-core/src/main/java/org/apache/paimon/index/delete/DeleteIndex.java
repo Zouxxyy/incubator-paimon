@@ -16,33 +16,17 @@
  * limitations under the License.
  */
 
-package org.apache.paimon.index;
+package org.apache.paimon.index.delete;
 
-import org.apache.paimon.data.BinaryRow;
+/** DeleteIndex. */
+public interface DeleteIndex {
+    void delete(long position);
 
-import javax.annotation.Nullable;
+    boolean isDeleted(long position);
 
-import java.util.List;
-import java.util.Optional;
+    boolean isEmpty();
 
-/** Maintainer to maintain index. */
-public interface IndexMaintainer<T, U> {
+    byte[] serializeToBytes();
 
-    void notifyNewRecord(T record);
-
-    List<IndexFileMeta> prepareCommit();
-
-    default void delete(String fileName) {
-        throw new UnsupportedOperationException();
-    }
-
-    default Optional<U> indexOf(String fileName) {
-        throw new UnsupportedOperationException();
-    }
-
-    /** Factory to restore {@link IndexMaintainer}. */
-    interface Factory<T, U> {
-        IndexMaintainer<T, U> createOrRestore(
-                @Nullable Long snapshotId, BinaryRow partition, int bucket);
-    }
+    DeleteIndex deserializeFromBytes(byte[] bytes);
 }

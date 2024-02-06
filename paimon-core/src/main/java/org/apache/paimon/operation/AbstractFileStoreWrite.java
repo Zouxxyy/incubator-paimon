@@ -37,6 +37,7 @@ import org.apache.paimon.table.sink.CommitMessageImpl;
 import org.apache.paimon.utils.CommitIncrement;
 import org.apache.paimon.utils.ExecutorThreadFactory;
 import org.apache.paimon.utils.FileStorePathFactory;
+import org.apache.paimon.utils.IntHashSet;
 import org.apache.paimon.utils.RecordWriter;
 import org.apache.paimon.utils.SnapshotManager;
 
@@ -67,7 +68,7 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
     protected final SnapshotManager snapshotManager;
     private final FileStoreScan scan;
     private final int writerNumberMax;
-    @Nullable private final IndexMaintainer.Factory<T> indexFactory;
+    @Nullable private final IndexMaintainer.Factory<T, IntHashSet> indexFactory;
 
     @Nullable protected IOManager ioManager;
 
@@ -86,7 +87,7 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
             String commitUser,
             SnapshotManager snapshotManager,
             FileStoreScan scan,
-            @Nullable IndexMaintainer.Factory<T> indexFactory,
+            @Nullable IndexMaintainer.Factory<T, IntHashSet> indexFactory,
             String tableName,
             FileStorePathFactory pathFactory,
             int writerNumberMax) {
@@ -354,7 +355,7 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
         if (!ignorePreviousFiles && latestSnapshotId != null) {
             restoreFiles = scanExistingFileMetas(latestSnapshotId, partition, bucket);
         }
-        IndexMaintainer<T> indexMaintainer =
+        IndexMaintainer<T, IntHashSet> indexMaintainer =
                 indexFactory == null
                         ? null
                         : indexFactory.createOrRestore(
@@ -447,13 +448,13 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
     @VisibleForTesting
     public static class WriterContainer<T> {
         public final RecordWriter<T> writer;
-        @Nullable public final IndexMaintainer<T> indexMaintainer;
+        @Nullable public final IndexMaintainer<T, IntHashSet> indexMaintainer;
         protected final long baseSnapshotId;
         protected long lastModifiedCommitIdentifier;
 
         protected WriterContainer(
                 RecordWriter<T> writer,
-                @Nullable IndexMaintainer<T> indexMaintainer,
+                @Nullable IndexMaintainer<T, IntHashSet> indexMaintainer,
                 Long baseSnapshotId) {
             this.writer = writer;
             this.indexMaintainer = indexMaintainer;

@@ -38,6 +38,7 @@ import org.apache.paimon.table.BucketMode;
 import org.apache.paimon.table.CatalogEnvironment;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.FileStorePathFactory;
+import org.apache.paimon.utils.IntHashSet;
 import org.apache.paimon.utils.KeyComparatorSupplier;
 import org.apache.paimon.utils.ValueEqualiserSupplier;
 
@@ -142,7 +143,7 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
 
     @Override
     public KeyValueFileStoreWrite newWrite(String commitUser, ManifestCacheFilter manifestFilter) {
-        IndexMaintainer.Factory<KeyValue> indexFactory = null;
+        IndexMaintainer.Factory<KeyValue, IntHashSet> indexFactory = null;
         if (bucketMode() == BucketMode.DYNAMIC) {
             indexFactory = new HashIndexMaintainer.Factory(newIndexFileHandler());
         }

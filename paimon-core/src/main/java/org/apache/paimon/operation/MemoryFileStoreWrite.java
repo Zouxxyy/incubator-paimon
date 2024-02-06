@@ -27,6 +27,7 @@ import org.apache.paimon.memory.MemoryPoolFactory;
 import org.apache.paimon.metrics.MetricRegistry;
 import org.apache.paimon.operation.metrics.WriterBufferMetric;
 import org.apache.paimon.utils.FileStorePathFactory;
+import org.apache.paimon.utils.IntHashSet;
 import org.apache.paimon.utils.RecordWriter;
 import org.apache.paimon.utils.SnapshotManager;
 
@@ -60,7 +61,7 @@ public abstract class MemoryFileStoreWrite<T> extends AbstractFileStoreWrite<T> 
             SnapshotManager snapshotManager,
             FileStoreScan scan,
             CoreOptions options,
-            @Nullable IndexMaintainer.Factory<T> indexFactory,
+            @Nullable IndexMaintainer.Factory<T, IntHashSet> indexFactory,
             String tableName,
             FileStorePathFactory pathFactory) {
         super(
