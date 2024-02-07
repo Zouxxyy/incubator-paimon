@@ -22,12 +22,16 @@ import org.apache.paimon.CoreOptions.MergeEngine;
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.codegen.RecordEqualiser;
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.DeleteIndex;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.KeyValueFileReaderFactory;
 import org.apache.paimon.io.KeyValueFileWriterFactory;
 import org.apache.paimon.mergetree.LookupLevels;
 import org.apache.paimon.mergetree.MergeSorter;
 import org.apache.paimon.mergetree.SortedRun;
+
+import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -56,7 +60,8 @@ public class LookupMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter {
             MergeFunctionFactory<KeyValue> mfFactory,
             MergeSorter mergeSorter,
             RecordEqualiser valueEqualiser,
-            boolean changelogRowDeduplicate) {
+            boolean changelogRowDeduplicate,
+            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
         super(
                 maxLevel,
                 mergeEngine,
@@ -66,7 +71,8 @@ public class LookupMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter {
                 mfFactory,
                 mergeSorter,
                 valueEqualiser,
-                changelogRowDeduplicate);
+                changelogRowDeduplicate,
+                deleteMapMaintainer);
         this.lookupLevels = lookupLevels;
     }
 
@@ -110,7 +116,8 @@ public class LookupMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter {
                     }
                 },
                 valueEqualiser,
-                changelogRowDeduplicate);
+                changelogRowDeduplicate,
+                deleteMapMaintainer);
     }
 
     @Override

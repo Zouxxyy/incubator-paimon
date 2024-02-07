@@ -24,6 +24,8 @@ import org.apache.paimon.format.FileFormatDiscover;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.index.HashIndexMaintainer;
 import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.DeleteIndex;
+import org.apache.paimon.index.delete.DeleteMapIndexMaintainer;
 import org.apache.paimon.io.KeyValueFileReaderFactory;
 import org.apache.paimon.manifest.ManifestCacheFilter;
 import org.apache.paimon.mergetree.compact.MergeFunctionFactory;
@@ -147,6 +149,10 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
         if (bucketMode() == BucketMode.DYNAMIC) {
             indexFactory = new HashIndexMaintainer.Factory(newIndexFileHandler());
         }
+        IndexMaintainer.Factory<KeyValue, DeleteIndex> deleteMapFactory = null;
+        if (options.deleteMapEnabled()) {
+            deleteMapFactory = new DeleteMapIndexMaintainer.Factory(newIndexFileHandler());
+        }
         return new KeyValueFileStoreWrite(
                 fileIO,
                 schemaManager,
@@ -162,6 +168,7 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
                 snapshotManager(),
                 newScan(true).withManifestCacheFilter(manifestFilter),
                 indexFactory,
+                deleteMapFactory,
                 options,
                 keyValueFieldsExtractor,
                 tableName);

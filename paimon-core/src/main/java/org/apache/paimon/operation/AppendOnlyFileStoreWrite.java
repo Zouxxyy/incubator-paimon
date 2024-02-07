@@ -28,6 +28,8 @@ import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.format.FileFormat;
 import org.apache.paimon.fs.FileIO;
+import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.DeleteIndex;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataFilePathFactory;
 import org.apache.paimon.io.RowDataRollingFileWriter;
@@ -85,7 +87,7 @@ public class AppendOnlyFileStoreWrite extends MemoryFileStoreWrite<InternalRow> 
             FileStoreScan scan,
             CoreOptions options,
             String tableName) {
-        super(commitUser, snapshotManager, scan, options, null, tableName, pathFactory);
+        super(commitUser, snapshotManager, scan, options, null, null, tableName, pathFactory);
         this.fileIO = fileIO;
         this.read = read;
         this.schemaId = schemaId;
@@ -110,7 +112,8 @@ public class AppendOnlyFileStoreWrite extends MemoryFileStoreWrite<InternalRow> 
             int bucket,
             List<DataFileMeta> restoredFiles,
             @Nullable CommitIncrement restoreIncrement,
-            ExecutorService compactExecutor) {
+            ExecutorService compactExecutor,
+            @Nullable IndexMaintainer<InternalRow, DeleteIndex> noUse) {
         // let writer and compact manager hold the same reference
         // and make restore files mutable to update
         long maxSequenceNumber = getMaxSequenceNumber(restoredFiles);

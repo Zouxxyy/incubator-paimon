@@ -31,6 +31,7 @@ import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.format.FileFormatDiscover;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.DeleteIndex;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.KeyValueFileReaderFactory;
 import org.apache.paimon.io.KeyValueFileWriterFactory;
@@ -103,10 +104,19 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
             SnapshotManager snapshotManager,
             FileStoreScan scan,
             @Nullable IndexMaintainer.Factory<KeyValue, IntHashSet> indexFactory,
+            @Nullable IndexMaintainer.Factory<KeyValue, DeleteIndex> deleteMapFactory,
             CoreOptions options,
             KeyValueFieldsExtractor extractor,
             String tableName) {
-        super(commitUser, snapshotManager, scan, options, indexFactory, tableName, pathFactory);
+        super(
+                commitUser,
+                snapshotManager,
+                scan,
+                options,
+                indexFactory,
+                deleteMapFactory,
+                tableName,
+                pathFactory);
         this.fileIO = fileIO;
         this.keyType = keyType;
         this.valueType = valueType;
@@ -142,7 +152,8 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
             int bucket,
             List<DataFileMeta> restoreFiles,
             @Nullable CommitIncrement restoreIncrement,
-            ExecutorService compactExecutor) {
+            ExecutorService compactExecutor,
+            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
         if (LOG.isDebugEnabled()) {
             LOG.debug(
                     "Creating merge tree writer for partition {} bucket {} from restored files {}",
@@ -166,7 +177,13 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                         ? new ForceUpLevel0Compaction(universalCompaction)
                         : universalCompaction;
         CompactManager compactManager =
-                createCompactManager(partition, bucket, compactStrategy, compactExecutor, levels);
+                createCompactManager(
+                        partition,
+                        bucket,
+                        compactStrategy,
+                        compactExecutor,
+                        levels,
+                        deleteMapMaintainer);
 
         return new MergeTreeWriter(
                 bufferSpillable(),
@@ -193,12 +210,14 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
             int bucket,
             CompactStrategy compactStrategy,
             ExecutorService compactExecutor,
-            Levels levels) {
+            Levels levels,
+            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
         if (options.writeOnly()) {
             return new NoopCompactManager();
         } else {
             Comparator<InternalRow> keyComparator = keyComparatorSupplier.get();
-            CompactRewriter rewriter = createRewriter(partition, bucket, keyComparator, levels);
+            CompactRewriter rewriter =
+                    createRewriter(partition, bucket, keyComparator, levels, deleteMapMaintainer);
             return new MergeTreeCompactManager(
                     compactExecutor,
                     levels,
@@ -212,13 +231,22 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
     }
 
     private MergeTreeCompactRewriter createRewriter(
-            BinaryRow partition, int bucket, Comparator<InternalRow> keyComparator, Levels levels) {
+            BinaryRow partition,
+            int bucket,
+            Comparator<InternalRow> keyComparator,
+            Levels levels,
+            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
         KeyValueFileReaderFactory readerFactory = readerFactoryBuilder.build(partition, bucket);
         KeyValueFileWriterFactory writerFactory =
                 writerFactoryBuilder.build(partition, bucket, options);
         MergeSorter mergeSorter = new MergeSorter(options, keyType, valueType, ioManager);
         int maxLevel = options.numLevels() - 1;
         CoreOptions.MergeEngine mergeEngine = options.mergeEngine();
+
+        // todo: decouple changelog and deleteMap creation
+        //  1. check all usages of options.changelogProducer()
+        //  2. ...
+
         switch (options.changelogProducer()) {
             case FULL_COMPACTION:
                 return new FullChangelogMergeTreeCompactRewriter(
@@ -249,7 +277,8 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                             mfFactory,
                             mergeSorter,
                             valueEqualiserSupplier.get(),
-                            options.changelogRowDeduplicate());
+                            options.changelogRowDeduplicate(),
+                            deleteMapMaintainer);
                 }
                 LookupLevels lookupLevels = createLookupLevels(levels, readerFactory);
                 return new LookupMergeTreeCompactRewriter(
@@ -262,7 +291,8 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                         mfFactory,
                         mergeSorter,
                         valueEqualiserSupplier.get(),
-                        options.changelogRowDeduplicate());
+                        options.changelogRowDeduplicate(),
+                        deleteMapMaintainer);
             default:
                 return new MergeTreeCompactRewriter(
                         readerFactory, writerFactory, keyComparator, mfFactory, mergeSorter);
@@ -291,7 +321,8 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                         options.get(CoreOptions.LOOKUP_HASH_LOAD_FACTOR)),
                 options.get(CoreOptions.LOOKUP_CACHE_FILE_RETENTION),
                 options.get(CoreOptions.LOOKUP_CACHE_MAX_DISK_SIZE),
-                bfGenerator(options));
+                bfGenerator(options),
+                this.options.deleteMapEnabled());
     }
 
     private ContainsLevels createContainsLevels(

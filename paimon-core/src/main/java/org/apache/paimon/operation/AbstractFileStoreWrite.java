@@ -25,6 +25,7 @@ import org.apache.paimon.disk.IOManager;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.index.IndexFileMeta;
 import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.DeleteIndex;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.IndexIncrement;
 import org.apache.paimon.manifest.ManifestEntry;
@@ -69,6 +70,7 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
     private final FileStoreScan scan;
     private final int writerNumberMax;
     @Nullable private final IndexMaintainer.Factory<T, IntHashSet> indexFactory;
+    @Nullable private final IndexMaintainer.Factory<T, DeleteIndex> deleteMapFactory;
 
     @Nullable protected IOManager ioManager;
 
@@ -88,6 +90,7 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
             SnapshotManager snapshotManager,
             FileStoreScan scan,
             @Nullable IndexMaintainer.Factory<T, IntHashSet> indexFactory,
+            @Nullable IndexMaintainer.Factory<T, DeleteIndex> deleteMapFactory,
             String tableName,
             FileStorePathFactory pathFactory,
             int writerNumberMax) {
@@ -95,7 +98,7 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
         this.snapshotManager = snapshotManager;
         this.scan = scan;
         this.indexFactory = indexFactory;
-
+        this.deleteMapFactory = deleteMapFactory;
         this.writers = new HashMap<>();
         this.tableName = tableName;
         this.pathFactory = pathFactory;
@@ -200,7 +203,10 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
                 CommitIncrement increment = writerContainer.writer.prepareCommit(waitCompaction);
                 List<IndexFileMeta> newIndexFiles = new ArrayList<>();
                 if (writerContainer.indexMaintainer != null) {
-                    newIndexFiles = writerContainer.indexMaintainer.prepareCommit();
+                    newIndexFiles.addAll(writerContainer.indexMaintainer.prepareCommit());
+                }
+                if (writerContainer.deleteMapMaintainer != null) {
+                    newIndexFiles.addAll(writerContainer.deleteMapMaintainer.prepareCommit());
                 }
                 CommitMessageImpl committable =
                         new CommitMessageImpl(
@@ -292,6 +298,7 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
                                 writerContainer.lastModifiedCommitIdentifier,
                                 dataFiles,
                                 writerContainer.indexMaintainer,
+                                writerContainer.deleteMapMaintainer,
                                 increment));
             }
         }
@@ -311,10 +318,15 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
                             state.bucket,
                             state.dataFiles,
                             state.commitIncrement,
-                            compactExecutor());
+                            compactExecutor(),
+                            state.deleteMapMaintainer);
             notifyNewWriter(writer);
             WriterContainer<T> writerContainer =
-                    new WriterContainer<>(writer, state.indexMaintainer, state.baseSnapshotId);
+                    new WriterContainer<>(
+                            writer,
+                            state.indexMaintainer,
+                            state.deleteMapMaintainer,
+                            state.baseSnapshotId);
             writerContainer.lastModifiedCommitIdentifier = state.lastModifiedCommitIdentifier;
             writers.computeIfAbsent(state.partition, k -> new HashMap<>())
                     .put(state.bucket, writerContainer);
@@ -360,10 +372,23 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
                         ? null
                         : indexFactory.createOrRestore(
                                 ignorePreviousFiles ? null : latestSnapshotId, partition, bucket);
+        IndexMaintainer<T, DeleteIndex> deleteMapMaintainer =
+                deleteMapFactory == null
+                        ? null
+                        : deleteMapFactory.createOrRestore(
+                                ignorePreviousFiles ? null : latestSnapshotId, partition, bucket);
+
         RecordWriter<T> writer =
-                createWriter(partition.copy(), bucket, restoreFiles, null, compactExecutor());
+                createWriter(
+                        partition.copy(),
+                        bucket,
+                        restoreFiles,
+                        null,
+                        compactExecutor(),
+                        deleteMapMaintainer);
         notifyNewWriter(writer);
-        return new WriterContainer<>(writer, indexMaintainer, latestSnapshotId);
+        return new WriterContainer<>(
+                writer, indexMaintainer, deleteMapMaintainer, latestSnapshotId);
     }
 
     @Override
@@ -436,7 +461,8 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
             int bucket,
             List<DataFileMeta> restoreFiles,
             @Nullable CommitIncrement restoreIncrement,
-            ExecutorService compactExecutor);
+            ExecutorService compactExecutor,
+            @Nullable IndexMaintainer<T, DeleteIndex> deleteMapMaintainer);
 
     // force buffer spill to avoid out of memory in batch mode
     protected void forceBufferSpill() throws Exception {}
@@ -449,15 +475,18 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
     public static class WriterContainer<T> {
         public final RecordWriter<T> writer;
         @Nullable public final IndexMaintainer<T, IntHashSet> indexMaintainer;
+        @Nullable public final IndexMaintainer<T, DeleteIndex> deleteMapMaintainer;
         protected final long baseSnapshotId;
         protected long lastModifiedCommitIdentifier;
 
         protected WriterContainer(
                 RecordWriter<T> writer,
                 @Nullable IndexMaintainer<T, IntHashSet> indexMaintainer,
+                @Nullable IndexMaintainer<T, DeleteIndex> deleteMapMaintainer,
                 Long baseSnapshotId) {
             this.writer = writer;
             this.indexMaintainer = indexMaintainer;
+            this.deleteMapMaintainer = deleteMapMaintainer;
             this.baseSnapshotId =
                     baseSnapshotId == null ? Snapshot.FIRST_SNAPSHOT_ID - 1 : baseSnapshotId;
             this.lastModifiedCommitIdentifier = Long.MIN_VALUE;

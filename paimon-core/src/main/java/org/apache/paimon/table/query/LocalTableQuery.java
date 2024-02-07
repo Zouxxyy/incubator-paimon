@@ -145,7 +145,8 @@ public class LocalTableQuery implements TableQuery {
                         hashLookupStoreFactory,
                         options.get(CoreOptions.LOOKUP_CACHE_FILE_RETENTION),
                         options.get(CoreOptions.LOOKUP_CACHE_MAX_DISK_SIZE),
-                        bfGenerator(options));
+                        bfGenerator(options),
+                        this.options.deleteMapEnabled());
 
         tableView.computeIfAbsent(partition, k -> new HashMap<>()).put(bucket, lookupLevels);
     }

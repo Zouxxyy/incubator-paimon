@@ -22,6 +22,7 @@ import org.apache.paimon.FileStore;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.disk.IOManager;
 import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.DeleteIndex;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.memory.MemoryPoolFactory;
 import org.apache.paimon.memory.MemorySegmentPool;
@@ -147,6 +148,7 @@ public interface FileStoreWrite<T> extends Restorable<List<FileStoreWrite.State<
         protected final long lastModifiedCommitIdentifier;
         protected final List<DataFileMeta> dataFiles;
         @Nullable protected final IndexMaintainer<T, IntHashSet> indexMaintainer;
+        @Nullable protected final IndexMaintainer<T, DeleteIndex> deleteMapMaintainer;
         protected final CommitIncrement commitIncrement;
 
         protected State(
@@ -156,6 +158,7 @@ public interface FileStoreWrite<T> extends Restorable<List<FileStoreWrite.State<
                 long lastModifiedCommitIdentifier,
                 Collection<DataFileMeta> dataFiles,
                 @Nullable IndexMaintainer<T, IntHashSet> indexMaintainer,
+                @Nullable IndexMaintainer<T, DeleteIndex> deleteMapMaintainer,
                 CommitIncrement commitIncrement) {
             this.partition = partition;
             this.bucket = bucket;
@@ -163,6 +166,7 @@ public interface FileStoreWrite<T> extends Restorable<List<FileStoreWrite.State<
             this.lastModifiedCommitIdentifier = lastModifiedCommitIdentifier;
             this.dataFiles = new ArrayList<>(dataFiles);
             this.indexMaintainer = indexMaintainer;
+            this.deleteMapMaintainer = deleteMapMaintainer;
             this.commitIncrement = commitIncrement;
         }
 

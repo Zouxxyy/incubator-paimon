@@ -68,6 +68,7 @@ public class LookupLevels implements Levels.DropFileCallback, Closeable {
     private final LookupStoreFactory lookupStoreFactory;
     private final Cache<String, LookupFile> lookupFiles;
     private final Function<Long, BloomFilter.Builder> bfGenerator;
+    private final boolean deleteMapEnabled;
 
     public LookupLevels(
             Levels levels,
@@ -79,7 +80,8 @@ public class LookupLevels implements Levels.DropFileCallback, Closeable {
             LookupStoreFactory lookupStoreFactory,
             Duration fileRetention,
             MemorySize maxDiskSize,
-            Function<Long, BloomFilter.Builder> bfGenerator) {
+            Function<Long, BloomFilter.Builder> bfGenerator,
+            boolean deleteMapEnabled) {
         this.levels = levels;
         this.keyComparator = keyComparator;
         this.keySerializer = new RowCompactedSerializer(keyType);
@@ -96,6 +98,7 @@ public class LookupLevels implements Levels.DropFileCallback, Closeable {
                         .executor(MoreExecutors.directExecutor())
                         .build();
         this.bfGenerator = bfGenerator;
+        this.deleteMapEnabled = deleteMapEnabled;
         levels.addDropFileCallback(this);
     }
 
@@ -145,11 +148,19 @@ public class LookupLevels implements Levels.DropFileCallback, Closeable {
             return null;
         }
         InternalRow value = valueSerializer.deserialize(valueBytes);
-        long sequenceNumber = MemorySegment.wrap(valueBytes).getLong(valueBytes.length - 9);
+        long sequenceNumber =
+                MemorySegment.wrap(valueBytes).getLongBigEndian(valueBytes.length - 9);
         RowKind rowKind = RowKind.fromByteValue(valueBytes[valueBytes.length - 1]);
-        return new KeyValue()
-                .replace(key, sequenceNumber, rowKind, value)
-                .setLevel(lookupFile.remoteFile().level());
+        KeyValue keyValue =
+                new KeyValue()
+                        .replace(key, sequenceNumber, rowKind, value)
+                        .setLevel(lookupFile.remoteFile().level());
+        if (deleteMapEnabled) {
+            keyValue.setPosition(
+                            MemorySegment.wrap(valueBytes).getLongBigEndian(valueBytes.length - 17))
+                    .setFileName(file.fileName());
+        }
+        return keyValue;
     }
 
     private int fileWeigh(String file, LookupFile lookupFile) {
@@ -183,6 +194,9 @@ public class LookupLevels implements Levels.DropFileCallback, Closeable {
                     byte[] keyBytes = keySerializer.serializeToBytes(kv.key());
                     valueOut.clear();
                     valueOut.write(valueSerializer.serializeToBytes(kv.value()));
+                    if (deleteMapEnabled) {
+                        valueOut.writeLong(kv.position());
+                    }
                     valueOut.writeLong(kv.sequenceNumber());
                     valueOut.writeByte(kv.valueKind().toByteValue());
                     byte[] valueBytes = valueOut.getCopyOfBuffer();

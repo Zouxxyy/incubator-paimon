@@ -23,6 +23,8 @@ import org.apache.paimon.KeyValue;
 import org.apache.paimon.codegen.RecordEqualiser;
 import org.apache.paimon.compact.CompactResult;
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.DeleteIndex;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.KeyValueFileReaderFactory;
 import org.apache.paimon.io.KeyValueFileWriterFactory;
@@ -31,6 +33,8 @@ import org.apache.paimon.mergetree.MergeSorter;
 import org.apache.paimon.mergetree.MergeTreeReaders;
 import org.apache.paimon.mergetree.SortedRun;
 import org.apache.paimon.reader.RecordReaderIterator;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,6 +51,7 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
     protected final MergeEngine mergeEngine;
     protected final RecordEqualiser valueEqualiser;
     protected final boolean changelogRowDeduplicate;
+    protected final @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer;
 
     public ChangelogMergeTreeRewriter(
             int maxLevel,
@@ -57,12 +62,14 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
             MergeFunctionFactory<KeyValue> mfFactory,
             MergeSorter mergeSorter,
             RecordEqualiser valueEqualiser,
-            boolean changelogRowDeduplicate) {
+            boolean changelogRowDeduplicate,
+            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
         super(readerFactory, writerFactory, keyComparator, mfFactory, mergeSorter);
         this.maxLevel = maxLevel;
         this.mergeEngine = mergeEngine;
         this.valueEqualiser = valueEqualiser;
         this.changelogRowDeduplicate = changelogRowDeduplicate;
+        this.deleteMapMaintainer = deleteMapMaintainer;
     }
 
     protected abstract boolean rewriteChangelog(
@@ -159,6 +166,11 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
                                 .map(x -> x.upgrade(outputLevel))
                                 .collect(Collectors.toList());
 
+        if (deleteMapMaintainer != null) {
+            for (DataFileMeta dataFileMeta : before) {
+                deleteMapMaintainer.delete(dataFileMeta.fileName());
+            }
+        }
         return new CompactResult(before, after, changelogFileWriter.result());
     }
 

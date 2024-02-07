@@ -20,6 +20,7 @@ package org.apache.paimon.schema;
 
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.CoreOptions.ChangelogProducer;
+import org.apache.paimon.CoreOptions.FileFormatType;
 import org.apache.paimon.casting.CastExecutor;
 import org.apache.paimon.casting.CastExecutors;
 import org.apache.paimon.data.BinaryString;
@@ -475,9 +476,15 @@ public class SchemaValidation {
     }
 
     private static void validateForDeleteMap(CoreOptions options) {
-        if (!options.formatType().equals(CoreOptions.FileFormatType.PARQUET)) {
+        if (!options.formatType().equals(FileFormatType.PARQUET)) {
             throw new IllegalArgumentException(
                     "Delete map is only supported for parquet file format now.");
+        }
+
+        // todo: decouple changelog and deleteMap creation
+        if (options.changelogProducer() != ChangelogProducer.LOOKUP) {
+            throw new IllegalArgumentException(
+                    "Delete map is only supported for lookup changelog producer now.");
         }
     }
 }

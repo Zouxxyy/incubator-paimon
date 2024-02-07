@@ -19,6 +19,7 @@
 package org.apache.paimon.index.delete;
 
 import org.apache.paimon.KeyValue;
+import org.apache.paimon.annotation.VisibleForTesting;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.index.IndexFileHandler;
 import org.apache.paimon.index.IndexFileMeta;
@@ -114,6 +115,12 @@ public class DeleteMapIndexMaintainer implements IndexMaintainer<KeyValue, Delet
                     .ifPresent(deleteIndex -> deleteMap.put(fileName, deleteIndex));
         }
         return Optional.ofNullable(deleteMap.get(fileName));
+    }
+
+    @VisibleForTesting
+    public Map<String, DeleteIndex> deleteMap() {
+        restoreDeleteMap();
+        return deleteMap;
     }
 
     /** Factory to restore {@link DeleteMapIndexMaintainer}. */

@@ -21,7 +21,11 @@ package org.apache.paimon.mergetree.compact;
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.codegen.RecordEqualiser;
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.DeleteIndex;
 import org.apache.paimon.types.RowKind;
+
+import javax.annotation.Nullable;
 
 import java.util.function.Function;
 
@@ -53,12 +57,14 @@ public class LookupChangelogMergeFunctionWrapper implements MergeFunctionWrapper
     private final KeyValue reusedAfter = new KeyValue();
     private final RecordEqualiser valueEqualiser;
     private final boolean changelogRowDeduplicate;
+    private final @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer;
 
     public LookupChangelogMergeFunctionWrapper(
             MergeFunctionFactory<KeyValue> mergeFunctionFactory,
             Function<InternalRow, KeyValue> lookup,
             RecordEqualiser valueEqualiser,
-            boolean changelogRowDeduplicate) {
+            boolean changelogRowDeduplicate,
+            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
         MergeFunction<KeyValue> mergeFunction = mergeFunctionFactory.create();
         checkArgument(
                 mergeFunction instanceof LookupMergeFunction,
@@ -69,6 +75,7 @@ public class LookupChangelogMergeFunctionWrapper implements MergeFunctionWrapper
         this.lookup = lookup;
         this.valueEqualiser = valueEqualiser;
         this.changelogRowDeduplicate = changelogRowDeduplicate;
+        this.deleteMapMaintainer = deleteMapMaintainer;
     }
 
     @Override
@@ -113,6 +120,9 @@ public class LookupChangelogMergeFunctionWrapper implements MergeFunctionWrapper
             mergeFunction2.add(result);
             result = mergeFunction2.getResult();
             setChangelog(highLevel, result);
+            if (highLevel.isAdd() && deleteMapMaintainer != null) {
+                deleteMapMaintainer.notifyNewRecord(highLevel);
+            }
         } else {
             setChangelog(null, result);
         }

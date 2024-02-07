@@ -58,7 +58,8 @@ public class FullChangelogMergeTreeCompactRewriter extends ChangelogMergeTreeRew
                 mfFactory,
                 mergeSorter,
                 valueComparator,
-                changelogRowDeduplicate);
+                changelogRowDeduplicate,
+                null);
     }
 
     @Override
