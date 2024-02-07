@@ -287,7 +287,7 @@ public class LookupLevelsTest {
                             }
                         },
                         new CoreOptions(new HashMap<>()));
-        return builder.build(BinaryRow.EMPTY_ROW, 0);
+        return builder.build(BinaryRow.EMPTY_ROW, 0, null);
     }
 
     private SchemaManager createSchemaManager(Path path) {

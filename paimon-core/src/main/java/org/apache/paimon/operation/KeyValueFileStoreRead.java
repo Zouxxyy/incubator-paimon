@@ -21,11 +21,14 @@ package org.apache.paimon.operation;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.KeyValueFileStore;
+import org.apache.paimon.annotation.VisibleForTesting;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.disk.IOManager;
 import org.apache.paimon.format.FileFormatDiscover;
 import org.apache.paimon.fs.FileIO;
+import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.DeleteIndex;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.KeyValueFileReaderFactory;
 import org.apache.paimon.mergetree.DropDeleteReader;
@@ -61,6 +64,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.paimon.io.DataFilePathFactory.CHANGELOG_FILE_PREFIX;
+import static org.apache.paimon.mergetree.MergeTreeReaders.readerForRun;
 import static org.apache.paimon.predicate.PredicateBuilder.containsFields;
 import static org.apache.paimon.predicate.PredicateBuilder.splitAnd;
 
@@ -81,9 +85,11 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
 
     @Nullable private int[][] pushdownProjection;
     @Nullable private int[][] outerProjection;
+    @Nullable private final IndexMaintainer.Factory<KeyValue, DeleteIndex> deleteIndexFactory;
 
     private boolean forceKeepDelete = false;
 
+    @VisibleForTesting
     public KeyValueFileStoreRead(
             FileIO fileIO,
             SchemaManager schemaManager,
@@ -112,7 +118,8 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
                         formatDiscover,
                         pathFactory,
                         extractor,
-                        options));
+                        options),
+                null);
     }
 
     public KeyValueFileStoreRead(
@@ -122,7 +129,8 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
             RowType valueType,
             Comparator<InternalRow> keyComparator,
             MergeFunctionFactory<KeyValue> mfFactory,
-            KeyValueFileReaderFactory.Builder readerFactoryBuilder) {
+            KeyValueFileReaderFactory.Builder readerFactoryBuilder,
+            @Nullable IndexMaintainer.Factory<KeyValue, DeleteIndex> deleteIndexFactory) {
         this.tableSchema = schemaManager.schema(schemaId);
         this.readerFactoryBuilder = readerFactoryBuilder;
         this.keyComparator = keyComparator;
@@ -130,6 +138,7 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
         this.mergeSorter =
                 new MergeSorter(
                         CoreOptions.fromMap(tableSchema.options()), keyType, valueType, null);
+        this.deleteIndexFactory = deleteIndexFactory;
     }
 
     public KeyValueFileStoreRead withKeyProjection(int[][] projectedFields) {
@@ -209,7 +218,12 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
         if (split.isStreaming()) {
             KeyValueFileReaderFactory readerFactory =
                     readerFactoryBuilder.build(
-                            split.partition(), split.bucket(), true, filtersForOverlappedSection);
+                            split.partition(),
+                            split.bucket(),
+                            true,
+                            filtersForOverlappedSection,
+                            getIndexMaintainer(
+                                    split.snapshotId(), split.partition(), split.bucket()));
             ReaderSupplier<KeyValue> beforeSupplier =
                     () -> new ReverseReader(streamingConcat(split.beforeFiles(), readerFactory));
             ReaderSupplier<KeyValue> dataSupplier =
@@ -218,14 +232,28 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
                     ? dataSupplier.get()
                     : ConcatRecordReader.create(Arrays.asList(beforeSupplier, dataSupplier));
         } else {
+            // todo: for incremental query with deleteMap mode, we can just filter out the compacted
+            //  files without needing to merge the diff
             return split.beforeFiles().isEmpty()
                     ? batchMergeRead(
-                            split.partition(), split.bucket(), split.dataFiles(), forceKeepDelete)
+                            split.partition(),
+                            split.bucket(),
+                            split.dataFiles(),
+                            forceKeepDelete,
+                            split.snapshotId())
                     : DiffReader.readDiff(
                             batchMergeRead(
-                                    split.partition(), split.bucket(), split.beforeFiles(), false),
+                                    split.partition(),
+                                    split.bucket(),
+                                    split.beforeFiles(),
+                                    false,
+                                    split.snapshotId()),
                             batchMergeRead(
-                                    split.partition(), split.bucket(), split.dataFiles(), false),
+                                    split.partition(),
+                                    split.bucket(),
+                                    split.dataFiles(),
+                                    false,
+                                    split.snapshotId()),
                             keyComparator,
                             mergeSorter,
                             forceKeepDelete);
@@ -233,30 +261,55 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
     }
 
     private RecordReader<KeyValue> batchMergeRead(
-            BinaryRow partition, int bucket, List<DataFileMeta> files, boolean keepDelete)
+            BinaryRow partition,
+            int bucket,
+            List<DataFileMeta> files,
+            boolean keepDelete,
+            long snapshotId)
             throws IOException {
         // Sections are read by SortMergeReader, which sorts and merges records by keys.
         // So we cannot project keys or else the sorting will be incorrect.
         KeyValueFileReaderFactory overlappedSectionFactory =
-                readerFactoryBuilder.build(partition, bucket, false, filtersForOverlappedSection);
+                readerFactoryBuilder.build(
+                        partition,
+                        bucket,
+                        false,
+                        filtersForOverlappedSection,
+                        getIndexMaintainer(snapshotId, partition, bucket));
         KeyValueFileReaderFactory nonOverlappedSectionFactory =
                 readerFactoryBuilder.build(
-                        partition, bucket, false, filtersForNonOverlappedSection);
+                        partition,
+                        bucket,
+                        false,
+                        filtersForNonOverlappedSection,
+                        getIndexMaintainer(snapshotId, partition, bucket));
 
         List<ReaderSupplier<KeyValue>> sectionReaders = new ArrayList<>();
         MergeFunctionWrapper<KeyValue> mergeFuncWrapper =
                 new ReducerMergeFunctionWrapper(mfFactory.create(pushdownProjection));
         for (List<SortedRun> section : new IntervalPartition(files, keyComparator).partition()) {
-            sectionReaders.add(
-                    () ->
-                            MergeTreeReaders.readerForSection(
-                                    section,
-                                    section.size() > 1
-                                            ? overlappedSectionFactory
-                                            : nonOverlappedSectionFactory,
-                                    keyComparator,
-                                    mergeFuncWrapper,
-                                    mergeSorter));
+            // todo: maybe we can add a new SortEngine which just concat record with merger
+            if (deleteIndexFactory != null) {
+                sectionReaders.add(
+                        () -> {
+                            List<ReaderSupplier<KeyValue>> readers = new ArrayList<>();
+                            for (SortedRun run : section) {
+                                readers.add(() -> readerForRun(run, nonOverlappedSectionFactory));
+                            }
+                            return ConcatRecordReader.create(readers);
+                        });
+            } else {
+                sectionReaders.add(
+                        () ->
+                                MergeTreeReaders.readerForSection(
+                                        section,
+                                        section.size() > 1
+                                                ? overlappedSectionFactory
+                                                : nonOverlappedSectionFactory,
+                                        keyComparator,
+                                        mergeFuncWrapper,
+                                        mergeSorter));
+            }
         }
 
         RecordReader<KeyValue> reader = ConcatRecordReader.create(sectionReaders);
@@ -297,5 +350,15 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
             RecordReader<KeyValue> reader, int[][] keyProjectedFields) {
         ProjectedRow projectedRow = ProjectedRow.from(keyProjectedFields);
         return reader.transform(kv -> kv.replaceKey(projectedRow.replaceRow(kv.key())));
+    }
+
+    // todo: add cache
+    private @Nullable IndexMaintainer<KeyValue, DeleteIndex> getIndexMaintainer(
+            long snapshotId, BinaryRow partition, int bucket) {
+        if (deleteIndexFactory != null) {
+            return deleteIndexFactory.createOrRestore(snapshotId, partition, bucket);
+        } else {
+            return null;
+        }
     }
 }

@@ -115,6 +115,10 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
 
     @Override
     public KeyValueFileStoreRead newRead() {
+        IndexMaintainer.Factory<KeyValue, DeleteIndex> deleteMapFactory = null;
+        if (options.deleteMapEnabled()) {
+            deleteMapFactory = new DeleteMapIndexMaintainer.Factory(newIndexFileHandler());
+        }
         return new KeyValueFileStoreRead(
                 schemaManager,
                 schemaId,
@@ -122,7 +126,8 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
                 valueType,
                 newKeyComparator(),
                 mfFactory,
-                newReaderFactoryBuilder());
+                newReaderFactoryBuilder(),
+                deleteMapFactory);
     }
 
     public KeyValueFileReaderFactory.Builder newReaderFactoryBuilder() {

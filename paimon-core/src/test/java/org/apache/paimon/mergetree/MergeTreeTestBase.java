@@ -170,8 +170,8 @@ public abstract class MergeTreeTestBase {
                             }
                         },
                         new CoreOptions(new HashMap<>()));
-        readerFactory = readerFactoryBuilder.build(BinaryRow.EMPTY_ROW, 0);
-        compactReaderFactory = readerFactoryBuilder.build(BinaryRow.EMPTY_ROW, 0);
+        readerFactory = readerFactoryBuilder.build(BinaryRow.EMPTY_ROW, 0, null);
+        compactReaderFactory = readerFactoryBuilder.build(BinaryRow.EMPTY_ROW, 0, null);
 
         Map<String, FileStorePathFactory> pathFactoryMap = new HashMap<>();
         pathFactoryMap.put(identifier, pathFactory);

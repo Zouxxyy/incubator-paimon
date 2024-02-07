@@ -236,7 +236,8 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
             Comparator<InternalRow> keyComparator,
             Levels levels,
             @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
-        KeyValueFileReaderFactory readerFactory = readerFactoryBuilder.build(partition, bucket);
+        KeyValueFileReaderFactory readerFactory =
+                readerFactoryBuilder.build(partition, bucket, deleteMapMaintainer);
         KeyValueFileWriterFactory writerFactory =
                 writerFactoryBuilder.build(partition, bucket, options);
         MergeSorter mergeSorter = new MergeSorter(options, keyType, valueType, ioManager);
@@ -265,7 +266,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                             readerFactoryBuilder
                                     .copyWithoutProjection()
                                     .withValueProjection(new int[0][])
-                                    .build(partition, bucket);
+                                    .build(partition, bucket, deleteMapMaintainer);
                     ContainsLevels containsLevels = createContainsLevels(levels, keyOnlyReader);
                     return new FirstRowMergeTreeCompactRewriter(
                             maxLevel,

@@ -124,7 +124,8 @@ public class LocalTableQuery implements TableQuery {
 
     private void newLookupLevels(BinaryRow partition, int bucket, List<DataFileMeta> dataFiles) {
         Levels levels = new Levels(keyComparatorSupplier.get(), dataFiles, options.numLevels());
-        KeyValueFileReaderFactory factory = readerFactoryBuilder.build(partition, bucket);
+        // todo: support delete map mode
+        KeyValueFileReaderFactory factory = readerFactoryBuilder.build(partition, bucket, null);
         Options options = this.options.toConfiguration();
         LookupLevels lookupLevels =
                 new LookupLevels(

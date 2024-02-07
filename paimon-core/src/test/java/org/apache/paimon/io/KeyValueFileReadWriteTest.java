@@ -293,7 +293,7 @@ public class KeyValueFileReadWriteTest {
         if (valueProjection != null) {
             builder.withValueProjection(valueProjection);
         }
-        return builder.build(BinaryRow.EMPTY_ROW, 0);
+        return builder.build(BinaryRow.EMPTY_ROW, 0, null);
     }
 
     private void assertData(

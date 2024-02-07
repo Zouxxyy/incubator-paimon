@@ -24,6 +24,9 @@ import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.format.FileFormatDiscover;
 import org.apache.paimon.format.FormatKey;
 import org.apache.paimon.fs.FileIO;
+import org.apache.paimon.index.IndexMaintainer;
+import org.apache.paimon.index.delete.ApplyDeleteIndexReader;
+import org.apache.paimon.index.delete.DeleteIndex;
 import org.apache.paimon.partition.PartitionUtils;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
@@ -42,6 +45,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /** Factory to create {@link RecordReader}s for reading {@link KeyValue} files. */
@@ -60,6 +65,7 @@ public class KeyValueFileReaderFactory {
     private final Map<FormatKey, BulkFormatMapping> bulkFormatMappings;
     private final BinaryRow partition;
     private final boolean deleteMapEnabled;
+    private final Function<String, Optional<DeleteIndex>> fileNameToDeleteIndex;
 
     private KeyValueFileReaderFactory(
             FileIO fileIO,
@@ -71,7 +77,8 @@ public class KeyValueFileReaderFactory {
             DataFilePathFactory pathFactory,
             long asyncThreshold,
             BinaryRow partition,
-            boolean deleteMapEnabled) {
+            boolean deleteMapEnabled,
+            Function<String, Optional<DeleteIndex>> fileNameToDeleteIndex) {
         this.fileIO = fileIO;
         this.schemaManager = schemaManager;
         this.schemaId = schemaId;
@@ -83,6 +90,7 @@ public class KeyValueFileReaderFactory {
         this.partition = partition;
         this.bulkFormatMappings = new HashMap<>();
         this.deleteMapEnabled = deleteMapEnabled;
+        this.fileNameToDeleteIndex = fileNameToDeleteIndex;
     }
 
     public RecordReader<KeyValue> createRecordReader(
@@ -117,18 +125,26 @@ public class KeyValueFileReaderFactory {
                                 new FormatKey(schemaId, formatIdentifier),
                                 key -> formatSupplier.get())
                         : formatSupplier.get();
-        return new KeyValueDataFileRecordReader(
-                fileIO,
-                bulkFormatMapping.getReaderFactory(),
-                pathFactory.toPath(fileName),
-                keyType,
-                valueType,
-                level,
-                poolSize,
-                bulkFormatMapping.getIndexMapping(),
-                bulkFormatMapping.getCastMapping(),
-                PartitionUtils.create(bulkFormatMapping.getPartitionPair(), partition),
-                deleteMapEnabled);
+
+        RecordReader<KeyValue> recordReader =
+                new KeyValueDataFileRecordReader(
+                        fileIO,
+                        bulkFormatMapping.getReaderFactory(),
+                        pathFactory.toPath(fileName),
+                        keyType,
+                        valueType,
+                        level,
+                        poolSize,
+                        bulkFormatMapping.getIndexMapping(),
+                        bulkFormatMapping.getCastMapping(),
+                        PartitionUtils.create(bulkFormatMapping.getPartitionPair(), partition),
+                        deleteMapEnabled);
+
+        Optional<DeleteIndex> deleteIndexOptional = fileNameToDeleteIndex.apply(fileName);
+        if (deleteIndexOptional.isPresent() && !deleteIndexOptional.get().isEmpty()) {
+            recordReader = new ApplyDeleteIndexReader(recordReader, deleteIndexOptional.get());
+        }
+        return recordReader;
     }
 
     public static Builder builder(
@@ -231,18 +247,25 @@ public class KeyValueFileReaderFactory {
             return projectedValueType;
         }
 
-        public KeyValueFileReaderFactory build(BinaryRow partition, int bucket) {
-            return build(partition, bucket, true, Collections.emptyList());
+        public KeyValueFileReaderFactory build(
+                BinaryRow partition,
+                int bucket,
+                @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
+            return build(partition, bucket, true, Collections.emptyList(), deleteMapMaintainer);
         }
 
         public KeyValueFileReaderFactory build(
                 BinaryRow partition,
                 int bucket,
                 boolean projectKeys,
-                @Nullable List<Predicate> filters) {
+                @Nullable List<Predicate> filters,
+                @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
             int[][] keyProjection = projectKeys ? this.keyProjection : fullKeyProjection;
             RowType projectedKeyType = projectKeys ? this.projectedKeyType : keyType;
-
+            Function<String, Optional<DeleteIndex>> fileNameToDeleteIndex =
+                    deleteMapMaintainer == null
+                            ? (fileName) -> Optional.empty()
+                            : deleteMapMaintainer::indexOf;
             return new KeyValueFileReaderFactory(
                     fileIO,
                     schemaManager,
@@ -254,7 +277,8 @@ public class KeyValueFileReaderFactory {
                     pathFactory.createDataFilePathFactory(partition, bucket),
                     options.fileReaderAsyncThreshold().getBytes(),
                     partition,
-                    options.deleteMapEnabled());
+                    options.deleteMapEnabled(),
+                    fileNameToDeleteIndex);
         }
 
         private void applyProjection() {
