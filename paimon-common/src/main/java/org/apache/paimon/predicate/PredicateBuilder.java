@@ -71,6 +71,14 @@ public class PredicateBuilder {
         return fieldNames.indexOf(field);
     }
 
+    public Predicate alwaysTrue() {
+        return new LeafPredicate(AlwaysTrue.INSTANCE, null, -1, null, Collections.emptyList());
+    }
+
+    public Predicate alwaysFalse() {
+        return new LeafPredicate(AlwaysFalse.INSTANCE, null, -1, null, Collections.emptyList());
+    }
+
     public Predicate equal(int idx, Object literal) {
         return leaf(Equal.INSTANCE, idx, literal);
     }

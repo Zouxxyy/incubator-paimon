@@ -23,7 +23,10 @@ import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.RowType;
 
+import org.apache.spark.sql.sources.AlwaysFalse;
+import org.apache.spark.sql.sources.AlwaysTrue;
 import org.apache.spark.sql.sources.And;
+import org.apache.spark.sql.sources.EqualNullSafe;
 import org.apache.spark.sql.sources.EqualTo;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.GreaterThan;
@@ -48,7 +51,10 @@ public class SparkFilterConverter {
 
     public static final List<String> SUPPORT_FILTERS =
             Arrays.asList(
+                    "AlwaysTrue",
+                    "AlwaysFalse",
                     "EqualTo",
+                    "EqualNullSafe",
                     "GreaterThan",
                     "GreaterThanOrEqual",
                     "LessThan",
@@ -70,12 +76,25 @@ public class SparkFilterConverter {
     }
 
     public Predicate convert(Filter filter) {
-        if (filter instanceof EqualTo) {
+        if (filter instanceof AlwaysTrue) {
+            return builder.alwaysTrue();
+        } else if (filter instanceof AlwaysFalse) {
+            return builder.alwaysFalse();
+        } else if (filter instanceof EqualTo) {
             EqualTo eq = (EqualTo) filter;
             // TODO deal with isNaN
             int index = fieldIndex(eq.attribute());
             Object literal = convertLiteral(index, eq.value());
             return builder.equal(index, literal);
+        } else if (filter instanceof EqualNullSafe) {
+            EqualNullSafe eq = (EqualNullSafe) filter;
+            if (eq.value() == null) {
+                return builder.isNull(fieldIndex(eq.attribute()));
+            } else {
+                int index = fieldIndex(eq.attribute());
+                Object literal = convertLiteral(index, eq.value());
+                return builder.equal(index, literal);
+            }
         } else if (filter instanceof GreaterThan) {
             GreaterThan gt = (GreaterThan) filter;
             int index = fieldIndex(gt.attribute());
@@ -123,16 +142,12 @@ public class SparkFilterConverter {
             Object literal = convertLiteral(index, startsWith.value());
             return builder.startsWith(index, literal);
         }
-
-        // TODO: In, NotIn, AlwaysTrue, AlwaysFalse, EqualNullSafe
         throw new UnsupportedOperationException(
                 filter + " is unsupported. Support Filters: " + SUPPORT_FILTERS);
     }
 
     public Object convertLiteral(String field, Object value) {
-        int index = fieldIndex(field);
-        DataType type = rowType.getTypeAt(index);
-        return convertJavaObject(type, value);
+        return convertLiteral(fieldIndex(field), value);
     }
 
     private int fieldIndex(String field) {

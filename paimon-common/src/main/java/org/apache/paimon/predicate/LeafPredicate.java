@@ -91,12 +91,18 @@ public class LeafPredicate implements Predicate {
 
     @Override
     public boolean test(InternalRow row) {
+        if (function.equals(AlwaysTrue.INSTANCE) || function.equals(AlwaysFalse.INSTANCE)) {
+            return function.test();
+        }
         return function.test(type, get(row, fieldIndex, type), literals);
     }
 
     @Override
     public boolean test(
             long rowCount, InternalRow minValues, InternalRow maxValues, InternalArray nullCounts) {
+        if (function.equals(AlwaysTrue.INSTANCE) || function.equals(AlwaysFalse.INSTANCE)) {
+            return function.test();
+        }
         Object min = get(minValues, fieldIndex, type);
         Object max = get(maxValues, fieldIndex, type);
         Long nullCount = nullCounts.isNullAt(fieldIndex) ? null : nullCounts.getLong(fieldIndex);
