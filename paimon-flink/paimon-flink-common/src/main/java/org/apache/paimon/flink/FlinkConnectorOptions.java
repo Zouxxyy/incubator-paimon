@@ -24,6 +24,7 @@ import org.apache.paimon.annotation.Documentation.ExcludeFromDocumentation;
 import org.apache.paimon.options.ConfigOption;
 import org.apache.paimon.options.ConfigOptions;
 import org.apache.paimon.options.MemorySize;
+import org.apache.paimon.options.Options;
 import org.apache.paimon.options.description.DescribedEnum;
 import org.apache.paimon.options.description.Description;
 import org.apache.paimon.options.description.InlineElement;
@@ -34,6 +35,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.apache.paimon.CoreOptions.CHANGELOG_PRODUCER;
+import static org.apache.paimon.CoreOptions.DELETE_MAP_ENABLED;
 import static org.apache.paimon.CoreOptions.STREAMING_READ_MODE;
 import static org.apache.paimon.options.ConfigOptions.key;
 import static org.apache.paimon.options.description.TextElement.text;
@@ -138,7 +141,7 @@ public class FlinkConnectorOptions {
                     .defaultValue(Duration.ofSeconds(0))
                     .withDescription(
                             "When "
-                                    + CoreOptions.CHANGELOG_PRODUCER.key()
+                                    + CHANGELOG_PRODUCER.key()
                                     + " is set to "
                                     + CoreOptions.ChangelogProducer.FULL_COMPACTION.name()
                                     + ", full compaction will be constantly triggered after this interval.");
@@ -149,7 +152,7 @@ public class FlinkConnectorOptions {
                     .defaultValue(true)
                     .withDescription(
                             "When "
-                                    + CoreOptions.CHANGELOG_PRODUCER.key()
+                                    + CHANGELOG_PRODUCER.key()
                                     + " is set to "
                                     + CoreOptions.ChangelogProducer.LOOKUP.name()
                                     + ", commit will wait for changelog generation by lookup.");
@@ -327,6 +330,12 @@ public class FlinkConnectorOptions {
             }
         }
         return list;
+    }
+
+    public static boolean waitCompaction(Options options) {
+        return (options.get(CHANGELOG_PRODUCER).equals(CoreOptions.ChangelogProducer.LOOKUP)
+                        && options.get(CHANGELOG_PRODUCER_LOOKUP_WAIT))
+                || options.get(DELETE_MAP_ENABLED);
     }
 
     /** The mode of lookup cache. */

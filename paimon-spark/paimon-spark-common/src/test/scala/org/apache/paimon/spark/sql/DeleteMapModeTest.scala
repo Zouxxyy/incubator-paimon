@@ -27,67 +27,72 @@ import org.junit.jupiter.api.Assertions
 class DeleteMapModeTest extends PaimonSparkTestBase {
 
   test("Paimon deleteMap: deleteMap write") {
-    spark.sql(s"""
-                 |CREATE TABLE T (id INT, name STRING)
-                 |TBLPROPERTIES (
-                 | 'primary-key' = 'id',
-                 | 'changelog-producer' = 'lookup',
-                 | 'file.format' = 'parquet',
-                 | 'delete-map.enabled' = 'true')
-                 |""".stripMargin)
-    val table = loadTable("T")
+    Seq("none", "lookup").foreach(
+      changelogProducer => {
+        withTable("T") {
+          spark.sql(s"""
+                       |CREATE TABLE T (id INT, name STRING)
+                       |TBLPROPERTIES (
+                       | 'primary-key' = 'id',
+                       | 'changelog-producer' = '$changelogProducer',
+                       | 'file.format' = 'parquet',
+                       | 'delete-map.enabled' = 'true')
+                       |""".stripMargin)
+          val table = loadTable("T")
 
-    spark.sql("INSERT INTO T VALUES (1, 'aaaaaaaaaaaaaaaaaaa'), (2, 'b'), (3, 'c')")
-    spark.sql("INSERT INTO T VALUES (1, 'a_new1'), (3, 'c_new1')")
-    checkAnswer(
-      spark.sql(s"SELECT * from T ORDER BY id"),
-      Row(1, "a_new1") :: Row(2, "b") :: Row(3, "c_new1") :: Nil)
+          spark.sql("INSERT INTO T VALUES (1, 'aaaaaaaaaaaaaaaaaaa'), (2, 'b'), (3, 'c')")
+          spark.sql("INSERT INTO T VALUES (1, 'a_new1'), (3, 'c_new1')")
+          checkAnswer(
+            spark.sql(s"SELECT * from T ORDER BY id"),
+            Row(1, "a_new1") :: Row(2, "b") :: Row(3, "c_new1") :: Nil)
 
-    val deleteMap1 = new DeleteMapIndexMaintainer(
-      table.store().newIndexFileHandler(),
-      table.snapshotManager().latestSnapshotId(),
-      BinaryRow.EMPTY_ROW,
-      0).deleteMap()
-    // 1, 3 deleted, their row positions are 0, 2
-    Assertions.assertEquals(1, deleteMap1.size())
-    deleteMap1
-      .entrySet()
-      .forEach(
-        e => {
-          Assertions.assertTrue(e.getValue.isDeleted(0))
-          Assertions.assertTrue(e.getValue.isDeleted(2))
-        })
+          val deleteMap1 = new DeleteMapIndexMaintainer(
+            table.store().newIndexFileHandler(),
+            table.snapshotManager().latestSnapshotId(),
+            BinaryRow.EMPTY_ROW,
+            0).deleteMap()
+          // 1, 3 deleted, their row positions are 0, 2
+          Assertions.assertEquals(1, deleteMap1.size())
+          deleteMap1
+            .entrySet()
+            .forEach(
+              e => {
+                Assertions.assertTrue(e.getValue.isDeleted(0))
+                Assertions.assertTrue(e.getValue.isDeleted(2))
+              })
 
-    spark.sql("INSERT INTO T VALUES (1, 'a_new1'), (2, 'b_new1')")
-    checkAnswer(
-      spark.sql(s"SELECT * from T ORDER BY id"),
-      Row(1, "a_new1") :: Row(2, "b_new1") :: Row(3, "c_new1") :: Nil)
+          spark.sql("INSERT INTO T VALUES (1, 'a_new1'), (2, 'b_new1')")
+          checkAnswer(
+            spark.sql(s"SELECT * from T ORDER BY id"),
+            Row(1, "a_new1") :: Row(2, "b_new1") :: Row(3, "c_new1") :: Nil)
 
-    val deleteMap2 = new DeleteMapIndexMaintainer(
-      table.store().newIndexFileHandler(),
-      table.snapshotManager().latestSnapshotId(),
-      BinaryRow.EMPTY_ROW,
-      0).deleteMap()
-    // trigger compaction, deleteMap should be empty
-    Assertions.assertTrue(deleteMap2.isEmpty)
+          val deleteMap2 = new DeleteMapIndexMaintainer(
+            table.store().newIndexFileHandler(),
+            table.snapshotManager().latestSnapshotId(),
+            BinaryRow.EMPTY_ROW,
+            0).deleteMap()
+          // trigger compaction, deleteMap should be empty
+          Assertions.assertTrue(deleteMap2.isEmpty)
 
-    spark.sql("INSERT INTO T VALUES (2, 'b_new2')")
-    checkAnswer(
-      spark.sql(s"SELECT * from T ORDER BY id"),
-      Row(1, "a_new1") :: Row(2, "b_new2") :: Row(3, "c_new1") :: Nil)
+          spark.sql("INSERT INTO T VALUES (2, 'b_new2')")
+          checkAnswer(
+            spark.sql(s"SELECT * from T ORDER BY id"),
+            Row(1, "a_new1") :: Row(2, "b_new2") :: Row(3, "c_new1") :: Nil)
 
-    val deleteMap3 = new DeleteMapIndexMaintainer(
-      table.store().newIndexFileHandler(),
-      table.snapshotManager().latestSnapshotId(),
-      BinaryRow.EMPTY_ROW,
-      0).deleteMap()
-    // 2 deleted, row positions is 1
-    Assertions.assertEquals(1, deleteMap3.size())
-    deleteMap3
-      .entrySet()
-      .forEach(
-        e => {
-          Assertions.assertTrue(e.getValue.isDeleted(1))
-        })
+          val deleteMap3 = new DeleteMapIndexMaintainer(
+            table.store().newIndexFileHandler(),
+            table.snapshotManager().latestSnapshotId(),
+            BinaryRow.EMPTY_ROW,
+            0).deleteMap()
+          // 2 deleted, row positions is 1
+          Assertions.assertEquals(1, deleteMap3.size())
+          deleteMap3
+            .entrySet()
+            .forEach(
+              e => {
+                Assertions.assertTrue(e.getValue.isDeleted(1))
+              })
+        }
+      })
   }
 }

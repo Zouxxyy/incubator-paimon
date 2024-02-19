@@ -42,6 +42,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.apache.paimon.utils.Preconditions.checkArgument;
+
 /**
  * A {@link MergeTreeCompactRewriter} which produces changelog files while performing compaction.
  */
@@ -52,6 +54,7 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
     protected final RecordEqualiser valueEqualiser;
     protected final boolean changelogRowDeduplicate;
     protected final @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer;
+    protected final boolean writeChangelog;
 
     public ChangelogMergeTreeRewriter(
             int maxLevel,
@@ -63,13 +66,18 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
             MergeSorter mergeSorter,
             RecordEqualiser valueEqualiser,
             boolean changelogRowDeduplicate,
-            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
+            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer,
+            boolean writeChangelog) {
         super(readerFactory, writerFactory, keyComparator, mfFactory, mergeSorter);
+        checkArgument(
+                writeChangelog || deleteMapMaintainer != null,
+                "Either writeChangelog must be true, or deleteMapMaintainer must not be null.");
         this.maxLevel = maxLevel;
         this.mergeEngine = mergeEngine;
         this.valueEqualiser = valueEqualiser;
         this.changelogRowDeduplicate = changelogRowDeduplicate;
         this.deleteMapMaintainer = deleteMapMaintainer;
+        this.writeChangelog = writeChangelog;
     }
 
     protected abstract boolean rewriteChangelog(
@@ -135,15 +143,19 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
             if (rewriteCompactFile) {
                 compactFileWriter = writerFactory.createRollingMergeTreeFileWriter(outputLevel);
             }
-            changelogFileWriter = writerFactory.createRollingChangelogFileWriter(outputLevel);
+            if (writeChangelog) {
+                changelogFileWriter = writerFactory.createRollingChangelogFileWriter(outputLevel);
+            }
 
             while (iterator.hasNext()) {
                 ChangelogResult result = iterator.next();
                 if (rewriteCompactFile && result.result() != null) {
                     compactFileWriter.write(result.result());
                 }
-                for (KeyValue kv : result.changelogs()) {
-                    changelogFileWriter.write(kv);
+                if (writeChangelog) {
+                    for (KeyValue kv : result.changelogs()) {
+                        changelogFileWriter.write(kv);
+                    }
                 }
             }
         } finally {
@@ -171,7 +183,10 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
                 deleteMapMaintainer.delete(dataFileMeta.fileName());
             }
         }
-        return new CompactResult(before, after, changelogFileWriter.result());
+        return new CompactResult(
+                before,
+                after,
+                writeChangelog ? changelogFileWriter.result() : Collections.emptyList());
     }
 
     @Override

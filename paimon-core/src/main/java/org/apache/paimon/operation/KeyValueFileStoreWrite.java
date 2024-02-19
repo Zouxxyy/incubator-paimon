@@ -71,6 +71,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 
+import static org.apache.paimon.CoreOptions.ChangelogProducer.FULL_COMPACTION;
+import static org.apache.paimon.CoreOptions.ChangelogProducer.LOOKUP;
 import static org.apache.paimon.io.DataFileMeta.getMaxSequenceNumber;
 import static org.apache.paimon.lookup.LookupStoreFactory.bfGenerator;
 
@@ -173,7 +175,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                         options.numSortedRunCompactionTrigger(),
                         options.optimizedCompactionInterval());
         CompactStrategy compactStrategy =
-                options.changelogProducer() == ChangelogProducer.LOOKUP
+                options.needLookup()
                         ? new ForceUpLevel0Compaction(universalCompaction)
                         : universalCompaction;
         CompactManager compactManager =
@@ -243,49 +245,31 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
         MergeSorter mergeSorter = new MergeSorter(options, keyType, valueType, ioManager);
         int maxLevel = options.numLevels() - 1;
         CoreOptions.MergeEngine mergeEngine = options.mergeEngine();
+        ChangelogProducer changelogProducer = options.changelogProducer();
 
-        // todo: decouple changelog and deleteMap creation
-        //  1. check all usages of options.changelogProducer()
-        //  2. ...
-
-        switch (options.changelogProducer()) {
-            case FULL_COMPACTION:
-                return new FullChangelogMergeTreeCompactRewriter(
+        if (changelogProducer.equals(FULL_COMPACTION)) {
+            return new FullChangelogMergeTreeCompactRewriter(
+                    maxLevel,
+                    mergeEngine,
+                    readerFactory,
+                    writerFactory,
+                    keyComparator,
+                    mfFactory,
+                    mergeSorter,
+                    valueEqualiserSupplier.get(),
+                    options.changelogRowDeduplicate());
+        } else if (options.needLookup()) {
+            if (mergeEngine == CoreOptions.MergeEngine.FIRST_ROW) {
+                KeyValueFileReaderFactory keyOnlyReader =
+                        readerFactoryBuilder
+                                .copyWithoutProjection()
+                                .withValueProjection(new int[0][])
+                                .build(partition, bucket, deleteMapMaintainer);
+                ContainsLevels containsLevels = createContainsLevels(levels, keyOnlyReader);
+                return new FirstRowMergeTreeCompactRewriter(
                         maxLevel,
                         mergeEngine,
-                        readerFactory,
-                        writerFactory,
-                        keyComparator,
-                        mfFactory,
-                        mergeSorter,
-                        valueEqualiserSupplier.get(),
-                        options.changelogRowDeduplicate());
-            case LOOKUP:
-                if (mergeEngine == CoreOptions.MergeEngine.FIRST_ROW) {
-                    KeyValueFileReaderFactory keyOnlyReader =
-                            readerFactoryBuilder
-                                    .copyWithoutProjection()
-                                    .withValueProjection(new int[0][])
-                                    .build(partition, bucket, deleteMapMaintainer);
-                    ContainsLevels containsLevels = createContainsLevels(levels, keyOnlyReader);
-                    return new FirstRowMergeTreeCompactRewriter(
-                            maxLevel,
-                            mergeEngine,
-                            containsLevels,
-                            readerFactory,
-                            writerFactory,
-                            keyComparator,
-                            mfFactory,
-                            mergeSorter,
-                            valueEqualiserSupplier.get(),
-                            options.changelogRowDeduplicate(),
-                            deleteMapMaintainer);
-                }
-                LookupLevels lookupLevels = createLookupLevels(levels, readerFactory);
-                return new LookupMergeTreeCompactRewriter(
-                        maxLevel,
-                        mergeEngine,
-                        lookupLevels,
+                        containsLevels,
                         readerFactory,
                         writerFactory,
                         keyComparator,
@@ -293,10 +277,26 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                         mergeSorter,
                         valueEqualiserSupplier.get(),
                         options.changelogRowDeduplicate(),
-                        deleteMapMaintainer);
-            default:
-                return new MergeTreeCompactRewriter(
-                        readerFactory, writerFactory, keyComparator, mfFactory, mergeSorter);
+                        deleteMapMaintainer,
+                        changelogProducer.equals(LOOKUP));
+            }
+            LookupLevels lookupLevels = createLookupLevels(levels, readerFactory);
+            return new LookupMergeTreeCompactRewriter(
+                    maxLevel,
+                    mergeEngine,
+                    lookupLevels,
+                    readerFactory,
+                    writerFactory,
+                    keyComparator,
+                    mfFactory,
+                    mergeSorter,
+                    valueEqualiserSupplier.get(),
+                    options.changelogRowDeduplicate(),
+                    deleteMapMaintainer,
+                    changelogProducer.equals(LOOKUP));
+        } else {
+            return new MergeTreeCompactRewriter(
+                    readerFactory, writerFactory, keyComparator, mfFactory, mergeSorter);
         }
     }
 

@@ -481,10 +481,10 @@ public class SchemaValidation {
                     "Delete map is only supported for parquet file format now.");
         }
 
-        // todo: decouple changelog and deleteMap creation
-        if (options.changelogProducer() != ChangelogProducer.LOOKUP) {
+        if (options.changelogProducer() != ChangelogProducer.NONE
+                && options.changelogProducer() != ChangelogProducer.LOOKUP) {
             throw new IllegalArgumentException(
-                    "Delete map is only supported for lookup changelog producer now.");
+                    "Delete map is only supported for none or lookup changelog producer now.");
         }
     }
 }

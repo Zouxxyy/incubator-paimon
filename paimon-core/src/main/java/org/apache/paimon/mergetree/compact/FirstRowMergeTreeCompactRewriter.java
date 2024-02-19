@@ -64,7 +64,8 @@ public class FirstRowMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter
             MergeSorter mergeSorter,
             RecordEqualiser valueEqualiser,
             boolean changelogRowDeduplicate,
-            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
+            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer,
+            boolean writeChangelog) {
         super(
                 maxLevel,
                 mergeEngine,
@@ -75,7 +76,8 @@ public class FirstRowMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter
                 mergeSorter,
                 valueEqualiser,
                 changelogRowDeduplicate,
-                deleteMapMaintainer);
+                deleteMapMaintainer,
+                writeChangelog);
         this.containsLevels = containsLevels;
     }
 

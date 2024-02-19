@@ -61,7 +61,8 @@ public class LookupMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter {
             MergeSorter mergeSorter,
             RecordEqualiser valueEqualiser,
             boolean changelogRowDeduplicate,
-            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer) {
+            @Nullable IndexMaintainer<KeyValue, DeleteIndex> deleteMapMaintainer,
+            boolean writeChangelog) {
         super(
                 maxLevel,
                 mergeEngine,
@@ -72,7 +73,8 @@ public class LookupMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter {
                 mergeSorter,
                 valueEqualiser,
                 changelogRowDeduplicate,
-                deleteMapMaintainer);
+                deleteMapMaintainer,
+                writeChangelog);
         this.lookupLevels = lookupLevels;
     }
 

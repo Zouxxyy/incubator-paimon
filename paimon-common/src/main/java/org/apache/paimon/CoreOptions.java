@@ -1365,6 +1365,11 @@ public class CoreOptions implements Serializable {
         return options.get(CHANGELOG_PRODUCER);
     }
 
+    public boolean needLookup() {
+        return options.get(CHANGELOG_PRODUCER).equals(ChangelogProducer.LOOKUP)
+                || deleteMapEnabled();
+    }
+
     public boolean changelogRowDeduplicate() {
         return options.get(CHANGELOG_PRODUCER_ROW_DEDUPLICATE);
     }
