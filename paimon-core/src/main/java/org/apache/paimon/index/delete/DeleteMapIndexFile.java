@@ -20,17 +20,17 @@ package org.apache.paimon.index.delete;
 
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.Path;
-import org.apache.paimon.utils.JsonSerdeUtil;
+import org.apache.paimon.fs.SeekableInputStream;
 import org.apache.paimon.utils.PathFactory;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 
-/** todo: add an abstract file. */
+/** x. */
 public class DeleteMapIndexFile {
 
     public static final String DELETE_MAP_INDEX = "DELETE_MAP";
@@ -51,30 +51,99 @@ public class DeleteMapIndexFile {
         }
     }
 
-    public Map<String, DeleteIndex> read(String fileName) throws IOException {
-        String json = fileIO.readFileUtf8(pathFactory.toPath(fileName));
-        LinkedHashMap<String, String> map =
-                (LinkedHashMap<String, String>) JsonSerdeUtil.fromJson(json, Map.class);
+    public Map<String, long[]> readDeleteIndexBytesOffsets(String fileName) {
+        try (DataInputStream dataInputStream =
+                new DataInputStream(fileIO.newInputStream(pathFactory.toPath(fileName)))) {
+            int size = dataInputStream.readInt();
+            int maxKeyLength = dataInputStream.readInt();
+            Map<String, long[]> map = new HashMap<>();
+            for (int i = 0; i < size; i++) {
+                byte[] bytes = new byte[maxKeyLength];
+                dataInputStream.read(bytes);
+                String key = new String(bytes).trim();
+                long start = dataInputStream.readLong();
+                long length = dataInputStream.readLong();
+                map.put(key, new long[] {start, length});
+            }
+            return map;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public Map<String, DeleteIndex> readAllDeleteIndex(
+            String fileName, Map<String, long[]> deleteIndexBytesOffsets) {
         Map<String, DeleteIndex> deleteIndexMap = new HashMap<>();
-        for (Map.Entry<String, String> entry : map.entrySet()) {
-            byte[] bytes = java.util.Base64.getDecoder().decode(entry.getValue());
-            deleteIndexMap.put(entry.getKey(), new BitmapDeleteIndex().deserializeFromBytes(bytes));
+        try (SeekableInputStream inputStream =
+                fileIO.newInputStream(pathFactory.toPath(fileName))) {
+            for (Map.Entry<String, long[]> entry : deleteIndexBytesOffsets.entrySet()) {
+                long[] offset = entry.getValue();
+                inputStream.seek(offset[0]);
+                byte[] bytes = new byte[(int) offset[1]];
+                inputStream.read(bytes);
+                deleteIndexMap.put(
+                        entry.getKey(), new BitmapDeleteIndex().deserializeFromBytes(bytes));
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
         return deleteIndexMap;
     }
 
-    public Optional<DeleteIndex> read(String fileName, String dataFileName) throws IOException {
-        // todo: support only read specific file's bitmap
-        return Optional.ofNullable(read(fileName).get(dataFileName));
+    public DeleteIndex readDeleteIndex(String fileName, long[] deleteIndexBytesOffset) {
+        try (SeekableInputStream inputStream =
+                fileIO.newInputStream(pathFactory.toPath(fileName))) {
+            inputStream.seek(deleteIndexBytesOffset[0]);
+            byte[] bytes = new byte[(int) deleteIndexBytesOffset[1]];
+            inputStream.read(bytes);
+            return new BitmapDeleteIndex().deserializeFromBytes(bytes);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
-    public String write(Map<String, DeleteIndex> input) throws IOException {
+    public String write(Map<String, DeleteIndex> input) {
+        int size = input.size();
+        int maxKeyLength = input.keySet().stream().mapToInt(String::length).max().orElse(0);
+
+        byte[][] keyBytesArray = new byte[size][];
+        long[] startArray = new long[size];
+        long[] lengthArray = new long[size];
+        byte[][] valueBytesArray = new byte[size][];
+        int i = 0;
+        long start = 8 + (long) size * (maxKeyLength + 16);
+        for (Map.Entry<String, DeleteIndex> entry : input.entrySet()) {
+            String key = entry.getKey();
+            byte[] valueBytes = entry.getValue().serializeToBytes();
+            keyBytesArray[i] = String.format("%" + maxKeyLength + "s", key).getBytes();
+            startArray[i] = start;
+            lengthArray[i] = valueBytes.length;
+            valueBytesArray[i] = valueBytes;
+            start += valueBytes.length;
+            i++;
+        }
+
         Path path = pathFactory.newPath();
-        try {
-            String json = JsonSerdeUtil.toJson(input);
-            fileIO.writeFileUtf8(path, json);
+        // File structure:
+        //  mapSize (int), maxKeyLength (int)
+        //  Array of <padded keyBytes (maxKeyLength), start (long), length (long)>
+        //  Array of <valueBytes>
+        try (DataOutputStream dataOutputStream =
+                new DataOutputStream(fileIO.newOutputStream(path, true))) {
+            dataOutputStream.writeInt(size);
+            dataOutputStream.writeInt(maxKeyLength);
+
+            for (int j = 0; j < size; j++) {
+                dataOutputStream.write(keyBytesArray[j]);
+                dataOutputStream.writeLong(startArray[j]);
+                dataOutputStream.writeLong(lengthArray[j]);
+            }
+
+            for (int j = 0; j < size; j++) {
+                dataOutputStream.write(valueBytesArray[j]);
+            }
         } catch (IOException e) {
-            throw new RuntimeException("Failed to xxx: " + path, e);
+            throw new RuntimeException(e);
         }
         return path.getName();
     }

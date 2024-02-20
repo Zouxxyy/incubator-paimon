@@ -34,7 +34,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
-/** Test for DeleteMapIndexMaintainer. */
+/** Test for {@link DeleteMapIndexMaintainer}. */
 public class DeleteMapIndexMaintainerTest extends PrimaryKeyTableTestBase {
     private IndexFileHandler fileHandler;
 
@@ -53,7 +53,10 @@ public class DeleteMapIndexMaintainerTest extends PrimaryKeyTableTestBase {
 
         List<IndexFileMeta> fileMetas = deleteMapIndexWriter.prepareCommit();
 
-        Map<String, DeleteIndex> deleteMap = fileHandler.readDeleteMapIndex(fileMetas.get(0));
+        Map<String, DeleteIndex> deleteMap =
+                fileHandler.readAllDeleteIndex(
+                        fileMetas.get(0),
+                        fileHandler.readDeleteIndexBytesOffsets(fileMetas.get(0)));
         Assertions.assertTrue(deleteMap.get("f1").isDeleted(1));
         Assertions.assertFalse(deleteMap.get("f1").isDeleted(2));
         Assertions.assertTrue(deleteMap.get("f1").isDeleted(1));

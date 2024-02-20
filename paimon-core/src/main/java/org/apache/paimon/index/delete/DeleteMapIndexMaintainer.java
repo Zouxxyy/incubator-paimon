@@ -29,7 +29,6 @@ import javax.annotation.Nullable;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,10 +38,10 @@ public class DeleteMapIndexMaintainer implements IndexMaintainer<KeyValue, Delet
 
     private final IndexFileHandler indexFileHandler;
     private final IndexFileMeta indexFile;
-    private Map<String, DeleteIndex> deleteMap;
+    private Map<String, long[]> deleteIndexBytesOffsets;
+    private final Map<String, DeleteIndex> deleteMap;
     private boolean modified;
     private boolean restored;
-    private final HashSet<String> restoredFile;
 
     public DeleteMapIndexMaintainer(
             IndexFileHandler fileHandler,
@@ -63,12 +62,11 @@ public class DeleteMapIndexMaintainer implements IndexMaintainer<KeyValue, Delet
         this.deleteMap = new HashMap<>();
         this.modified = false;
         this.restored = false;
-        this.restoredFile = new HashSet<>();
     }
 
     @Override
     public void notifyNewRecord(KeyValue record) {
-        restoreDeleteMap();
+        restoreAllDeleteIndex();
         DeleteIndex deleteIndex =
                 deleteMap.computeIfAbsent(record.fileName(), k -> new BitmapDeleteIndex());
         if (!deleteIndex.isDeleted(record.position())) {
@@ -78,7 +76,7 @@ public class DeleteMapIndexMaintainer implements IndexMaintainer<KeyValue, Delet
     }
 
     public void delete(String fileName) {
-        restoreDeleteMap();
+        restoreAllDeleteIndex();
         if (deleteMap.containsKey(fileName)) {
             deleteMap.remove(fileName);
             modified = true;
@@ -95,32 +93,51 @@ public class DeleteMapIndexMaintainer implements IndexMaintainer<KeyValue, Delet
         return Collections.emptyList();
     }
 
-    // This method is only used by writer, which restore the whole delete map
-    private void restoreDeleteMap() {
-        if (indexFile != null && !restored) {
-            this.deleteMap = indexFileHandler.readDeleteMapIndex(indexFile);
-            restored = true;
-        }
-    }
-
     // This method is only used by the reader, which just lazy load the specified delete index
     public Optional<DeleteIndex> indexOf(String fileName) {
-        if (indexFile != null
-                && !restored
-                && !restoredFile.contains(fileName)
-                && !deleteMap.containsKey(fileName)) {
-            restoredFile.add(fileName);
-            indexFileHandler
-                    .readDeleteIndex(indexFile, fileName)
-                    .ifPresent(deleteIndex -> deleteMap.put(fileName, deleteIndex));
-        }
+        restoreDeleteIndex(fileName);
         return Optional.ofNullable(deleteMap.get(fileName));
     }
 
     @VisibleForTesting
     public Map<String, DeleteIndex> deleteMap() {
-        restoreDeleteMap();
+        restoreAllDeleteIndex();
         return deleteMap;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Internal methods
+    // -------------------------------------------------------------------------
+
+    private void restoreDeleteIndexBytesOffsets() {
+        if (indexFile != null && deleteIndexBytesOffsets == null) {
+            deleteIndexBytesOffsets =
+                    new HashMap<>(indexFileHandler.readDeleteIndexBytesOffsets(indexFile));
+        }
+    }
+
+    // Restore the whole delete map
+    private void restoreAllDeleteIndex() {
+        restoreDeleteIndexBytesOffsets();
+        if (indexFile != null && !restored) {
+            deleteMap.putAll(
+                    indexFileHandler.readAllDeleteIndex(indexFile, deleteIndexBytesOffsets));
+            restored = true;
+        }
+    }
+
+    // Restore the specified delete index
+    private void restoreDeleteIndex(String fileName) {
+        restoreDeleteIndexBytesOffsets();
+        if (indexFile != null
+                && !restored
+                && !deleteMap.containsKey(fileName)
+                && deleteIndexBytesOffsets.containsKey(fileName)) {
+            deleteMap.put(
+                    fileName,
+                    indexFileHandler.readDeleteIndex(
+                            indexFile, deleteIndexBytesOffsets.get(fileName)));
+        }
     }
 
     /** Factory to restore {@link DeleteMapIndexMaintainer}. */

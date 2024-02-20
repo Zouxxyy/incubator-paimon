@@ -18,8 +18,6 @@
 
 package org.apache.paimon.utils;
 
-import org.apache.paimon.index.delete.DeleteIndex;
-import org.apache.paimon.index.delete.DeleteIndexSerializer;
 import org.apache.paimon.schema.SchemaSerializer;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.types.DataField;
@@ -157,11 +155,6 @@ public class JsonSerdeUtil {
                 DataTypeJsonParser::parseDataField);
         registerJsonObjects(
                 module, DataType.class, DataType::serializeJson, DataTypeJsonParser::parseDataType);
-        registerJsonObjects(
-                module,
-                DeleteIndex.class,
-                DeleteIndexSerializer.INSTANCE,
-                DeleteIndexSerializer.INSTANCE);
         return module;
     }
 

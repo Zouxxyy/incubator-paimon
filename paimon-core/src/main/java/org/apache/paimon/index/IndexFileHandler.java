@@ -156,38 +156,34 @@ public class IndexFileHandler {
         indexManifestFile.delete(indexManifest);
     }
 
-    public IndexFileMeta writeDeleteMapIndex(Map<String, DeleteIndex> deleteMap) {
-        String file;
-        try {
-            file = deleteMapIndex.write(deleteMap);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return new IndexFileMeta(
-                DELETE_MAP_INDEX, file, deleteMapIndex.fileSize(file), deleteMap.size());
-    }
-
-    public Map<String, DeleteIndex> readDeleteMapIndex(IndexFileMeta deleteMapFile) {
+    public Map<String, long[]> readDeleteIndexBytesOffsets(IndexFileMeta deleteMapFile) {
         if (!deleteMapFile.indexType().equals(DELETE_MAP_INDEX)) {
             throw new IllegalArgumentException(
                     "Input file is not delete map index: " + deleteMapFile.indexType());
         }
-        try {
-            return deleteMapIndex.read(deleteMapFile.fileName());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return deleteMapIndex.readDeleteIndexBytesOffsets(deleteMapFile.fileName());
     }
 
-    public Optional<DeleteIndex> readDeleteIndex(IndexFileMeta deleteMapFile, String fileName) {
+    public Map<String, DeleteIndex> readAllDeleteIndex(
+            IndexFileMeta deleteMapFile, Map<String, long[]> deleteIndexBytesOffsets) {
+        if (!deleteMapFile.indexType().equals(DELETE_MAP_INDEX)) {
+            throw new IllegalArgumentException(
+                    "Input file is not delete map index: " + deleteMapFile.indexType());
+        }
+        return deleteMapIndex.readAllDeleteIndex(deleteMapFile.fileName(), deleteIndexBytesOffsets);
+    }
+
+    public DeleteIndex readDeleteIndex(IndexFileMeta deleteMapFile, long[] deleteIndexBytesOffset) {
         if (!deleteMapFile.indexType().equals(DELETE_MAP_INDEX)) {
             throw new IllegalArgumentException(
                     "Input file is not delete map index" + deleteMapFile.indexType());
         }
-        try {
-            return deleteMapIndex.read(deleteMapFile.fileName(), fileName);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return deleteMapIndex.readDeleteIndex(deleteMapFile.fileName(), deleteIndexBytesOffset);
+    }
+
+    public IndexFileMeta writeDeleteMapIndex(Map<String, DeleteIndex> deleteMap) {
+        String file = deleteMapIndex.write(deleteMap);
+        return new IndexFileMeta(
+                DELETE_MAP_INDEX, file, deleteMapIndex.fileSize(file), deleteMap.size());
     }
 }
