@@ -28,6 +28,8 @@ import java.io.DataOutputStream;
 /** BitmapDeleteIndex. */
 public class BitmapDeleteIndex implements DeleteIndex {
 
+    public static final int MAGIC_NUMBER = 1581511376;
+
     private RoaringBitmap roaringBitmap;
 
     BitmapDeleteIndex() {
@@ -54,6 +56,7 @@ public class BitmapDeleteIndex implements DeleteIndex {
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             DataOutputStream dos = new DataOutputStream(bos);
+            dos.writeInt(MAGIC_NUMBER);
             roaringBitmap.runOptimize();
             roaringBitmap.serialize(dos);
             dos.close();
@@ -68,6 +71,9 @@ public class BitmapDeleteIndex implements DeleteIndex {
         try {
             ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
             DataInputStream dis = new DataInputStream(bis);
+            if (dis.readInt() != MAGIC_NUMBER) {
+                throw new RuntimeException("Invalid magic number");
+            }
             this.roaringBitmap = new RoaringBitmap();
             roaringBitmap.deserialize(dis);
             dis.close();

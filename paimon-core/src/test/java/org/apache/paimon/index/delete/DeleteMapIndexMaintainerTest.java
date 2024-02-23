@@ -53,10 +53,7 @@ public class DeleteMapIndexMaintainerTest extends PrimaryKeyTableTestBase {
 
         List<IndexFileMeta> fileMetas = deleteMapIndexWriter.prepareCommit();
 
-        Map<String, DeleteIndex> deleteMap =
-                fileHandler.readAllDeleteIndex(
-                        fileMetas.get(0),
-                        fileHandler.readDeleteIndexBytesOffsets(fileMetas.get(0)));
+        Map<String, DeleteIndex> deleteMap = fileHandler.readAllDeleteIndex(fileMetas.get(0));
         Assertions.assertTrue(deleteMap.get("f1").isDeleted(1));
         Assertions.assertFalse(deleteMap.get("f1").isDeleted(2));
         Assertions.assertTrue(deleteMap.get("f1").isDeleted(1));

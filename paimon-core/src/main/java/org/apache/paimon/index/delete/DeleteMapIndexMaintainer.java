@@ -29,19 +29,21 @@ import javax.annotation.Nullable;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /** x. */
 public class DeleteMapIndexMaintainer implements IndexMaintainer<KeyValue, DeleteIndex> {
 
     private final IndexFileHandler indexFileHandler;
     private final IndexFileMeta indexFile;
-    private Map<String, long[]> deleteIndexBytesOffsets;
     private final Map<String, DeleteIndex> deleteMap;
     private boolean modified;
     private boolean restored;
+    private final Set<String> restoredFileNames;
 
     public DeleteMapIndexMaintainer(
             IndexFileHandler fileHandler,
@@ -62,6 +64,7 @@ public class DeleteMapIndexMaintainer implements IndexMaintainer<KeyValue, Delet
         this.deleteMap = new HashMap<>();
         this.modified = false;
         this.restored = false;
+        this.restoredFileNames = new HashSet<>();
     }
 
     @Override
@@ -109,34 +112,24 @@ public class DeleteMapIndexMaintainer implements IndexMaintainer<KeyValue, Delet
     //  Internal methods
     // -------------------------------------------------------------------------
 
-    private void restoreDeleteIndexBytesOffsets() {
-        if (indexFile != null && deleteIndexBytesOffsets == null) {
-            deleteIndexBytesOffsets =
-                    new HashMap<>(indexFileHandler.readDeleteIndexBytesOffsets(indexFile));
-        }
-    }
-
     // Restore the whole delete map
     private void restoreAllDeleteIndex() {
-        restoreDeleteIndexBytesOffsets();
         if (indexFile != null && !restored) {
-            deleteMap.putAll(
-                    indexFileHandler.readAllDeleteIndex(indexFile, deleteIndexBytesOffsets));
+            deleteMap.putAll(indexFileHandler.readAllDeleteIndex(indexFile));
             restored = true;
         }
     }
 
     // Restore the specified delete index
     private void restoreDeleteIndex(String fileName) {
-        restoreDeleteIndexBytesOffsets();
         if (indexFile != null
                 && !restored
                 && !deleteMap.containsKey(fileName)
-                && deleteIndexBytesOffsets.containsKey(fileName)) {
-            deleteMap.put(
-                    fileName,
-                    indexFileHandler.readDeleteIndex(
-                            indexFile, deleteIndexBytesOffsets.get(fileName)));
+                && !restoredFileNames.contains(fileName)) {
+            restoredFileNames.add(fileName);
+            indexFileHandler
+                    .readDeleteIndex(indexFile, fileName)
+                    .ifPresent(deleteIndex -> deleteMap.put(fileName, deleteIndex));
         }
     }
 

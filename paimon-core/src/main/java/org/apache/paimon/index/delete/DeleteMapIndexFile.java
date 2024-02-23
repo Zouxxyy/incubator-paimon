@@ -21,20 +21,22 @@ package org.apache.paimon.index.delete;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.fs.SeekableInputStream;
+import org.apache.paimon.utils.Pair;
 import org.apache.paimon.utils.PathFactory;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.zip.CRC32;
 
 /** x. */
 public class DeleteMapIndexFile {
 
     public static final String DELETE_MAP_INDEX = "DELETE_MAP";
-
+    public static final byte VERSION_ID_V1 = 1;
     private final FileIO fileIO;
     private final PathFactory pathFactory;
 
@@ -51,38 +53,14 @@ public class DeleteMapIndexFile {
         }
     }
 
-    public Map<String, long[]> readDeleteIndexBytesOffsets(String fileName) {
-        try (DataInputStream dataInputStream =
-                new DataInputStream(fileIO.newInputStream(pathFactory.toPath(fileName)))) {
-            int size = dataInputStream.readInt();
-            int maxKeyLength = dataInputStream.readInt();
-            Map<String, long[]> map = new HashMap<>();
-            for (int i = 0; i < size; i++) {
-                byte[] bytes = new byte[maxKeyLength];
-                dataInputStream.read(bytes);
-                String key = new String(bytes).trim();
-                long start = dataInputStream.readLong();
-                long length = dataInputStream.readLong();
-                map.put(key, new long[] {start, length});
-            }
-            return map;
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
     public Map<String, DeleteIndex> readAllDeleteIndex(
-            String fileName, Map<String, long[]> deleteIndexBytesOffsets) {
+            String fileName, Map<String, Pair<Integer, Integer>> deleteIndexRanges) {
         Map<String, DeleteIndex> deleteIndexMap = new HashMap<>();
         try (SeekableInputStream inputStream =
                 fileIO.newInputStream(pathFactory.toPath(fileName))) {
-            for (Map.Entry<String, long[]> entry : deleteIndexBytesOffsets.entrySet()) {
-                long[] offset = entry.getValue();
-                inputStream.seek(offset[0]);
-                byte[] bytes = new byte[(int) offset[1]];
-                inputStream.read(bytes);
-                deleteIndexMap.put(
-                        entry.getKey(), new BitmapDeleteIndex().deserializeFromBytes(bytes));
+            checkVersion(inputStream);
+            for (Map.Entry<String, Pair<Integer, Integer>> entry : deleteIndexRanges.entrySet()) {
+                deleteIndexMap.put(entry.getKey(), seekDeleteIndex(inputStream, entry.getValue()));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -90,65 +68,107 @@ public class DeleteMapIndexFile {
         return deleteIndexMap;
     }
 
-    public DeleteIndex readDeleteIndex(String fileName, long[] deleteIndexBytesOffset) {
+    public DeleteIndex readDeleteIndex(String fileName, Pair<Integer, Integer> deleteIndexRange) {
         try (SeekableInputStream inputStream =
                 fileIO.newInputStream(pathFactory.toPath(fileName))) {
-            inputStream.seek(deleteIndexBytesOffset[0]);
-            byte[] bytes = new byte[(int) deleteIndexBytesOffset[1]];
+            checkVersion(inputStream);
+            return seekDeleteIndex(inputStream, deleteIndexRange);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public Pair<String, Map<String, Pair<Integer, Integer>>> write(Map<String, DeleteIndex> input) {
+        int size = input.size();
+        HashMap<String, Pair<Integer, Integer>> deleteIndexRanges = new HashMap<>(size);
+        Path path = pathFactory.newPath();
+        try (DataOutputStream dataOutputStream =
+                new DataOutputStream(fileIO.newOutputStream(path, true))) {
+            dataOutputStream.writeByte(VERSION_ID_V1);
+            for (Map.Entry<String, DeleteIndex> entry : input.entrySet()) {
+                String key = entry.getKey();
+                byte[] valueBytes = entry.getValue().serializeToBytes();
+                deleteIndexRanges.put(key, Pair.of(dataOutputStream.size(), valueBytes.length));
+                dataOutputStream.writeInt(valueBytes.length);
+                dataOutputStream.write(valueBytes);
+                dataOutputStream.writeInt(calculateChecksum(valueBytes));
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return Pair.of(path.getName(), deleteIndexRanges);
+    }
+
+    public void delete(String fileName) {
+        fileIO.deleteQuietly(pathFactory.toPath(fileName));
+    }
+
+    // -------------------------------------------------------------------------
+    //  Internal methods
+    // -------------------------------------------------------------------------
+
+    private void checkVersion(SeekableInputStream in) throws IOException {
+        int version = in.read();
+        if (version != VERSION_ID_V1) {
+            throw new RuntimeException(
+                    "Version not match, actual size: "
+                            + version
+                            + ", expert size: "
+                            + VERSION_ID_V1);
+        }
+    }
+
+    private int readInt(SeekableInputStream in) throws IOException {
+        int ch1 = in.read();
+        int ch2 = in.read();
+        int ch3 = in.read();
+        int ch4 = in.read();
+        if ((ch1 | ch2 | ch3 | ch4) < 0) {
+            throw new EOFException();
+        }
+        return ((ch1 << 24) + (ch2 << 16) + (ch3 << 8) + (ch4));
+    }
+
+    private DeleteIndex seekDeleteIndex(
+            SeekableInputStream inputStream, Pair<Integer, Integer> deleteIndexRange) {
+        try {
+            Integer start = deleteIndexRange.getLeft();
+            Integer size = deleteIndexRange.getRight();
+
+            // check size
+            inputStream.seek(start);
+            int actualSize = readInt(inputStream);
+            if (actualSize != size) {
+                throw new RuntimeException(
+                        "Size not match, actual size: " + actualSize + ", expert size: " + size);
+            }
+
+            // read deleteIndex bytes
+            inputStream.seek(start + 4);
+            byte[] bytes = new byte[deleteIndexRange.getRight()];
             inputStream.read(bytes);
+
+            // check checksum
+            inputStream.seek(start + 4 + size);
+            int checkSum = calculateChecksum(bytes);
+            int actualCheckSum = readInt(inputStream);
+            if (actualCheckSum != checkSum) {
+                throw new RuntimeException(
+                        "Checksum not match, actual checksum: "
+                                + actualCheckSum
+                                + ", expected checksum: "
+                                + checkSum);
+            }
+
             return new BitmapDeleteIndex().deserializeFromBytes(bytes);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
-    public String write(Map<String, DeleteIndex> input) {
-        int size = input.size();
-        int maxKeyLength = input.keySet().stream().mapToInt(String::length).max().orElse(0);
-
-        byte[][] keyBytesArray = new byte[size][];
-        long[] startArray = new long[size];
-        long[] lengthArray = new long[size];
-        byte[][] valueBytesArray = new byte[size][];
-        int i = 0;
-        long start = 8 + (long) size * (maxKeyLength + 16);
-        for (Map.Entry<String, DeleteIndex> entry : input.entrySet()) {
-            String key = entry.getKey();
-            byte[] valueBytes = entry.getValue().serializeToBytes();
-            keyBytesArray[i] = String.format("%" + maxKeyLength + "s", key).getBytes();
-            startArray[i] = start;
-            lengthArray[i] = valueBytes.length;
-            valueBytesArray[i] = valueBytes;
-            start += valueBytes.length;
-            i++;
-        }
-
-        Path path = pathFactory.newPath();
-        // File structure:
-        //  mapSize (int), maxKeyLength (int)
-        //  Array of <padded keyBytes (maxKeyLength), start (long), length (long)>
-        //  Array of <valueBytes>
-        try (DataOutputStream dataOutputStream =
-                new DataOutputStream(fileIO.newOutputStream(path, true))) {
-            dataOutputStream.writeInt(size);
-            dataOutputStream.writeInt(maxKeyLength);
-
-            for (int j = 0; j < size; j++) {
-                dataOutputStream.write(keyBytesArray[j]);
-                dataOutputStream.writeLong(startArray[j]);
-                dataOutputStream.writeLong(lengthArray[j]);
-            }
-
-            for (int j = 0; j < size; j++) {
-                dataOutputStream.write(valueBytesArray[j]);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        return path.getName();
-    }
-
-    public void delete(String fileName) {
-        fileIO.deleteQuietly(pathFactory.toPath(fileName));
+    private int calculateChecksum(byte[] bytes) {
+        CRC32 crc = new CRC32();
+        crc.update(bytes);
+        return (int) crc.getValue();
     }
 }

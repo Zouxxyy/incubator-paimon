@@ -25,6 +25,7 @@ import org.apache.paimon.index.delete.DeleteMapIndexFile;
 import org.apache.paimon.manifest.IndexManifestEntry;
 import org.apache.paimon.manifest.IndexManifestFile;
 import org.apache.paimon.utils.IntIterator;
+import org.apache.paimon.utils.Pair;
 import org.apache.paimon.utils.SnapshotManager;
 
 import java.io.IOException;
@@ -156,34 +157,39 @@ public class IndexFileHandler {
         indexManifestFile.delete(indexManifest);
     }
 
-    public Map<String, long[]> readDeleteIndexBytesOffsets(IndexFileMeta deleteMapFile) {
+    public Map<String, DeleteIndex> readAllDeleteIndex(IndexFileMeta deleteMapFile) {
         if (!deleteMapFile.indexType().equals(DELETE_MAP_INDEX)) {
             throw new IllegalArgumentException(
                     "Input file is not delete map index: " + deleteMapFile.indexType());
         }
-        return deleteMapIndex.readDeleteIndexBytesOffsets(deleteMapFile.fileName());
-    }
-
-    public Map<String, DeleteIndex> readAllDeleteIndex(
-            IndexFileMeta deleteMapFile, Map<String, long[]> deleteIndexBytesOffsets) {
-        if (!deleteMapFile.indexType().equals(DELETE_MAP_INDEX)) {
-            throw new IllegalArgumentException(
-                    "Input file is not delete map index: " + deleteMapFile.indexType());
+        Map<String, Pair<Integer, Integer>> deleteIndexRange = deleteMapFile.deleteIndexRanges();
+        if (deleteIndexRange == null || deleteIndexRange.isEmpty()) {
+            return Collections.emptyMap();
         }
-        return deleteMapIndex.readAllDeleteIndex(deleteMapFile.fileName(), deleteIndexBytesOffsets);
+        return deleteMapIndex.readAllDeleteIndex(deleteMapFile.fileName(), deleteIndexRange);
     }
 
-    public DeleteIndex readDeleteIndex(IndexFileMeta deleteMapFile, long[] deleteIndexBytesOffset) {
+    public Optional<DeleteIndex> readDeleteIndex(IndexFileMeta deleteMapFile, String fileName) {
         if (!deleteMapFile.indexType().equals(DELETE_MAP_INDEX)) {
             throw new IllegalArgumentException(
                     "Input file is not delete map index" + deleteMapFile.indexType());
         }
-        return deleteMapIndex.readDeleteIndex(deleteMapFile.fileName(), deleteIndexBytesOffset);
+        Map<String, Pair<Integer, Integer>> deleteIndexRange = deleteMapFile.deleteIndexRanges();
+        if (deleteIndexRange == null || !deleteIndexRange.containsKey(fileName)) {
+            return Optional.empty();
+        }
+        return Optional.of(
+                deleteMapIndex.readDeleteIndex(
+                        deleteMapFile.fileName(), deleteIndexRange.get(fileName)));
     }
 
     public IndexFileMeta writeDeleteMapIndex(Map<String, DeleteIndex> deleteMap) {
-        String file = deleteMapIndex.write(deleteMap);
+        Pair<String, Map<String, Pair<Integer, Integer>>> pair = deleteMapIndex.write(deleteMap);
         return new IndexFileMeta(
-                DELETE_MAP_INDEX, file, deleteMapIndex.fileSize(file), deleteMap.size());
+                DELETE_MAP_INDEX,
+                pair.getLeft(),
+                deleteMapIndex.fileSize(pair.getLeft()),
+                deleteMap.size(),
+                pair.getRight());
     }
 }

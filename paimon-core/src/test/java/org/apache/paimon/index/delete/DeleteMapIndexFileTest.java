@@ -20,6 +20,7 @@ package org.apache.paimon.index.delete;
 
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.fs.local.LocalFileIO;
+import org.apache.paimon.utils.Pair;
 import org.apache.paimon.utils.PathFactory;
 
 import org.junit.jupiter.api.Assertions;
@@ -68,14 +69,14 @@ public class DeleteMapIndexFileTest {
         index3.delete(3);
         deleteMap.put("file33.parquet", index3);
 
-        String deleteMapIndexFileName = deleteMapIndexFile.write(deleteMap);
+        Pair<String, Map<String, Pair<Integer, Integer>>> pair =
+                deleteMapIndexFile.write(deleteMap);
+        String fileName = pair.getLeft();
+        Map<String, Pair<Integer, Integer>> deleteIndexRanges = pair.getRight();
 
         // read
-        Map<String, long[]> deleteIndexBytesOffsets =
-                deleteMapIndexFile.readDeleteIndexBytesOffsets(deleteMapIndexFileName);
         Map<String, DeleteIndex> actualDeleteMap =
-                deleteMapIndexFile.readAllDeleteIndex(
-                        deleteMapIndexFileName, deleteIndexBytesOffsets);
+                deleteMapIndexFile.readAllDeleteIndex(fileName, deleteIndexRanges);
         Assertions.assertTrue(actualDeleteMap.get("file1.parquet").isDeleted(1));
         Assertions.assertFalse(actualDeleteMap.get("file1.parquet").isDeleted(2));
         Assertions.assertTrue(actualDeleteMap.get("file2.parquet").isDeleted(2));
@@ -84,7 +85,7 @@ public class DeleteMapIndexFileTest {
 
         DeleteIndex file1DeleteIndex =
                 deleteMapIndexFile.readDeleteIndex(
-                        deleteMapIndexFileName, deleteIndexBytesOffsets.get("file1.parquet"));
+                        fileName, deleteIndexRanges.get("file1.parquet"));
         Assertions.assertTrue(file1DeleteIndex.isDeleted(1));
         Assertions.assertFalse(file1DeleteIndex.isDeleted(2));
     }

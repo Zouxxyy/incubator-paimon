@@ -20,6 +20,7 @@ package org.apache.paimon.index.delete;
 
 /** DeleteIndex. */
 public interface DeleteIndex {
+
     void delete(long position);
 
     boolean isDeleted(long position);
