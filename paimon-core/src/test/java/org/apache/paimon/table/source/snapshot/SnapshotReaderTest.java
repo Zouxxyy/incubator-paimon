@@ -22,6 +22,7 @@ import org.apache.paimon.CoreOptions;
 import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.data.serializer.InternalRowSerializer;
+import org.apache.paimon.disk.IOManagerImpl;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.FileIOFinder;
 import org.apache.paimon.fs.Path;
@@ -41,6 +42,7 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypes;
+import org.apache.paimon.types.RowKind;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.TraceableFileIO;
 
@@ -53,6 +55,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,7 +82,7 @@ public class SnapshotReaderTest {
                         new String[] {"pt", "k", "v"});
         FileStoreTable table =
                 createFileStoreTable(
-                        rowType, Collections.singletonList("pt"), Arrays.asList("pt", "k"));
+                        rowType, Collections.singletonList("pt"), Arrays.asList("pt", "k"), false);
 
         String commitUser = UUID.randomUUID().toString();
         StreamTableWrite write = table.newWrite(commitUser);
@@ -178,7 +181,8 @@ public class SnapshotReaderTest {
                         new DataType[] {DataTypes.INT(), DataTypes.BIGINT()},
                         new String[] {"k", "v"});
         FileStoreTable table =
-                createFileStoreTable(rowType, Collections.emptyList(), Collections.emptyList());
+                createFileStoreTable(
+                        rowType, Collections.emptyList(), Collections.emptyList(), false);
 
         String commitUser = UUID.randomUUID().toString();
         StreamTableWrite write = table.newWrite(commitUser);
@@ -255,17 +259,86 @@ public class SnapshotReaderTest {
         commit.close();
     }
 
+    @Test
+    public void testGetPrimaryKeyRawFilesWithDeleteFile() throws Exception {
+        RowType rowType =
+                RowType.of(
+                        new DataType[] {DataTypes.STRING(), DataTypes.INT(), DataTypes.BIGINT()},
+                        new String[] {"pt", "k", "v"});
+        FileStoreTable table =
+                createFileStoreTable(
+                        rowType, Collections.singletonList("pt"), Arrays.asList("pt", "k"), true);
+
+        String commitUser = UUID.randomUUID().toString();
+        StreamTableWrite write =
+                table.newWrite(commitUser).withIOManager(new IOManagerImpl(tempDir.toString()));
+        StreamTableCommit commit = table.newCommit(commitUser);
+        SnapshotReader reader = table.newSnapshotReader();
+
+        // commit 1: insert
+        write.write(GenericRow.of(BinaryString.fromString("one"), 11, 1101L));
+        write.write(GenericRow.of(BinaryString.fromString("one"), 12, 1201L));
+        write.write(GenericRow.of(BinaryString.fromString("two"), 21, 2101L));
+        write.write(GenericRow.of(BinaryString.fromString("two"), 22, 2201L));
+        commit.commit(1, write.prepareCommit(true, 1));
+
+        // commit 2: delete and update
+        write.write(GenericRow.ofKind(RowKind.DELETE, BinaryString.fromString("one"), 11, 1101L));
+        write.write(GenericRow.of(BinaryString.fromString("two"), 21, 2222L));
+        commit.commit(2, write.prepareCommit(true, 2));
+
+        // check result
+        List<DataSplit> dataSplits = reader.read().dataSplits();
+        assertThat(dataSplits).hasSize(2);
+
+        // partition one: file1 + delete file
+        DataSplit p1Split =
+                dataSplits.stream()
+                        .filter(x -> x.partition().getString(0).toString().equals("one"))
+                        .findFirst()
+                        .get();
+        List<RawFile> p1SplitRawFiles = p1Split.convertToRawFiles().get();
+        assertThat(p1SplitRawFiles).hasSize(1);
+        assertThat(p1SplitRawFiles.get(0).deleteFile().nonEmpty()).isTrue();
+
+        // partition two: file1 + delete file, file2
+        DataSplit p2Split =
+                dataSplits.stream()
+                        .filter(x -> x.partition().getString(0).toString().equals("two"))
+                        .findFirst()
+                        .get();
+        List<RawFile> p2SplitRawFiles = p2Split.convertToRawFiles().get();
+        assertThat(p2SplitRawFiles).hasSize(2);
+        Optional<RawFile> rawFileWithDeleteFile =
+                p2SplitRawFiles.stream().filter(x -> x.deleteFile().nonEmpty()).findFirst();
+        Optional<RawFile> rawFileWithOutDeleteFile =
+                p2SplitRawFiles.stream().filter(x -> !x.deleteFile().nonEmpty()).findFirst();
+        assertThat(rawFileWithDeleteFile).isPresent();
+        assertThat(rawFileWithOutDeleteFile).isPresent();
+
+        write.close();
+        commit.close();
+    }
+
     private FileStoreTable createFileStoreTable(
-            RowType rowType, List<String> partitionKeys, List<String> primaryKeys)
+            RowType rowType,
+            List<String> partitionKeys,
+            List<String> primaryKeys,
+            boolean deleteMapEnabled)
             throws Exception {
         Options options = new Options();
-        options.set(CoreOptions.BUCKET, 1);
-        options.set(CoreOptions.NUM_SORTED_RUNS_COMPACTION_TRIGGER, 5);
-        options.set(CoreOptions.FILE_FORMAT, CoreOptions.FileFormatType.AVRO);
-        Map<String, String> formatPerLevel = new HashMap<>();
-        formatPerLevel.put("5", "orc");
-        options.set(CoreOptions.FILE_FORMAT_PER_LEVEL, formatPerLevel);
-
+        if (deleteMapEnabled) {
+            options.set(CoreOptions.BUCKET, 1);
+            options.set(CoreOptions.FILE_FORMAT, CoreOptions.FileFormatType.PARQUET);
+            options.set(CoreOptions.DELETE_MAP_ENABLED, true);
+        } else {
+            options.set(CoreOptions.BUCKET, 1);
+            options.set(CoreOptions.NUM_SORTED_RUNS_COMPACTION_TRIGGER, 5);
+            options.set(CoreOptions.FILE_FORMAT, CoreOptions.FileFormatType.AVRO);
+            Map<String, String> formatPerLevel = new HashMap<>();
+            formatPerLevel.put("5", "orc");
+            options.set(CoreOptions.FILE_FORMAT_PER_LEVEL, formatPerLevel);
+        }
         SchemaManager schemaManager = new SchemaManager(fileIO, tablePath);
         TableSchema tableSchema =
                 schemaManager.createTable(

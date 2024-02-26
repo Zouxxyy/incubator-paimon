@@ -24,6 +24,9 @@ import org.apache.paimon.codegen.CodeGenUtils;
 import org.apache.paimon.codegen.RecordComparator;
 import org.apache.paimon.consumer.ConsumerManager;
 import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.index.IndexFileHandler;
+import org.apache.paimon.index.IndexFileMeta;
+import org.apache.paimon.index.delete.DeleteMapIndexFile;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.manifest.FileKind;
 import org.apache.paimon.manifest.ManifestEntry;
@@ -42,6 +45,7 @@ import org.apache.paimon.table.source.SplitGenerator;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.FileStorePathFactory;
 import org.apache.paimon.utils.Filter;
+import org.apache.paimon.utils.Pair;
 import org.apache.paimon.utils.SnapshotManager;
 import org.apache.paimon.utils.TypeUtils;
 
@@ -79,6 +83,7 @@ public class SnapshotReaderImpl implements SnapshotReader {
     private RecordComparator lazyPartitionComparator;
 
     private final String tableName;
+    private final IndexFileHandler indexFileHandler;
 
     public SnapshotReaderImpl(
             FileStoreScan scan,
@@ -89,7 +94,8 @@ public class SnapshotReaderImpl implements SnapshotReader {
             BiConsumer<FileStoreScan, Predicate> nonPartitionFilterConsumer,
             DefaultValueAssigner defaultValueAssigner,
             FileStorePathFactory pathFactory,
-            String tableName) {
+            String tableName,
+            IndexFileHandler indexFileHandler) {
         this.scan = scan;
         this.tableSchema = tableSchema;
         this.options = options;
@@ -100,8 +106,8 @@ public class SnapshotReaderImpl implements SnapshotReader {
         this.nonPartitionFilterConsumer = nonPartitionFilterConsumer;
         this.defaultValueAssigner = defaultValueAssigner;
         this.pathFactory = pathFactory;
-
         this.tableName = tableName;
+        this.indexFileHandler = indexFileHandler;
     }
 
     @Override
@@ -289,7 +295,9 @@ public class SnapshotReaderImpl implements SnapshotReader {
                 for (List<DataFileMeta> dataFiles : splitGroups) {
                     splits.add(
                             builder.withDataFiles(dataFiles)
-                                    .rawFiles(convertToRawFiles(partition, bucket, dataFiles))
+                                    .rawFiles(
+                                            convertToRawFiles(
+                                                    partition, bucket, dataFiles, snapshotId))
                                     .build());
                 }
             }
@@ -366,7 +374,7 @@ public class SnapshotReaderImpl implements SnapshotReader {
                                 .withBeforeFiles(before)
                                 .withDataFiles(data)
                                 .isStreaming(isStreaming)
-                                .rawFiles(convertToRawFiles(part, bucket, data))
+                                .rawFiles(convertToRawFiles(part, bucket, data, plan.snapshotId()))
                                 .build();
                 splits.add(split);
             }
@@ -414,29 +422,62 @@ public class SnapshotReaderImpl implements SnapshotReader {
     }
 
     private List<RawFile> convertToRawFiles(
-            BinaryRow partition, int bucket, List<DataFileMeta> dataFiles) {
+            BinaryRow partition, int bucket, List<DataFileMeta> dataFiles, long snapshotId) {
         String bucketPath = pathFactory.bucketPath(partition, bucket).toString();
+        String indexPath = pathFactory.indexPath().toString();
 
         // append only files can be returned
         if (tableSchema.primaryKeys().isEmpty()) {
-            return makeRawTableFiles(bucketPath, dataFiles);
+            return makeRawTableFiles(bucketPath, dataFiles, indexPath, null);
         }
 
-        int maxLevel = options.numLevels() - 1;
-        if (dataFiles.stream().map(DataFileMeta::level).allMatch(l -> l == maxLevel)) {
-            return makeRawTableFiles(bucketPath, dataFiles);
+        if (options.deleteMapEnabled()) {
+            IndexFileMeta deleteMapIndexFile =
+                    indexFileHandler
+                            .scan(
+                                    snapshotId,
+                                    DeleteMapIndexFile.DELETE_MAP_INDEX,
+                                    partition,
+                                    bucket)
+                            .orElse(null);
+            return makeRawTableFiles(bucketPath, dataFiles, indexPath, deleteMapIndexFile);
+        } else {
+            int maxLevel = options.numLevels() - 1;
+            if (dataFiles.stream().map(DataFileMeta::level).allMatch(l -> l == maxLevel)) {
+                return makeRawTableFiles(bucketPath, dataFiles, indexPath, null);
+            }
         }
-
         return Collections.emptyList();
     }
 
-    private List<RawFile> makeRawTableFiles(String bucketPath, List<DataFileMeta> dataFiles) {
+    private List<RawFile> makeRawTableFiles(
+            String bucketPath,
+            List<DataFileMeta> dataFiles,
+            String indexPath,
+            @Nullable IndexFileMeta deleteMapIndexFile) {
         return dataFiles.stream()
-                .map(f -> makeRawTableFile(bucketPath, f))
+                .map(f -> makeRawTableFile(bucketPath, f, indexPath, deleteMapIndexFile))
                 .collect(Collectors.toList());
     }
 
-    private RawFile makeRawTableFile(String bucketPath, DataFileMeta meta) {
+    private RawFile makeRawTableFile(
+            String bucketPath,
+            DataFileMeta meta,
+            String indexPath,
+            @Nullable IndexFileMeta deleteMapIndexMeta) {
+        RawFile.DeleteFile deleteFile = RawFile.DeleteFile.EMPTY_DELETE_FILE;
+        if (deleteMapIndexMeta != null) {
+            Map<String, Pair<Integer, Integer>> deleteIndexRanges =
+                    deleteMapIndexMeta.deleteIndexRanges();
+            if (deleteIndexRanges != null && deleteIndexRanges.containsKey(meta.fileName())) {
+                Pair<Integer, Integer> range = deleteIndexRanges.get(meta.fileName());
+                deleteFile =
+                        new RawFile.DeleteFile(
+                                indexPath + "/" + deleteMapIndexMeta.fileName(),
+                                range.getLeft(),
+                                range.getRight());
+            }
+        }
         return new RawFile(
                 bucketPath + "/" + meta.fileName(),
                 0,
@@ -449,6 +490,7 @@ public class SnapshotReaderImpl implements SnapshotReader {
                                         .toString()
                                         .toLowerCase()),
                 meta.schemaId(),
-                meta.rowCount());
+                meta.rowCount(),
+                deleteFile);
     }
 }

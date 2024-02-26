@@ -124,6 +124,10 @@ public class FileStorePathFactory {
         return DataFilePathFactory.bucketPath(root, getPartitionString(partition), bucket);
     }
 
+    public Path indexPath() {
+        return new Path(root + "/index");
+    }
+
     /** IMPORTANT: This method is NOT THREAD SAFE. */
     public String getPartitionString(BinaryRow partition) {
         return PartitionPathUtils.generatePartitionPath(

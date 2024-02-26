@@ -42,14 +42,28 @@ public class RawFile {
 
     private final long rowCount;
 
+    private final DeleteFile deleteFile;
+
     public RawFile(
             String path, long offset, long length, String format, long schemaId, long rowCount) {
+        this(path, offset, length, format, schemaId, rowCount, DeleteFile.EMPTY_DELETE_FILE);
+    }
+
+    public RawFile(
+            String path,
+            long offset,
+            long length,
+            String format,
+            long schemaId,
+            long rowCount,
+            DeleteFile deleteFile) {
         this.path = path;
         this.offset = offset;
         this.length = length;
         this.format = format;
         this.schemaId = schemaId;
         this.rowCount = rowCount;
+        this.deleteFile = deleteFile;
     }
 
     /** Path of the file. */
@@ -85,6 +99,11 @@ public class RawFile {
         return rowCount;
     }
 
+    /** @since 0.8.0 */
+    public DeleteFile deleteFile() {
+        return deleteFile;
+    }
+
     public void serialize(DataOutputView out) throws IOException {
         out.writeUTF(path);
         out.writeLong(offset);
@@ -92,6 +111,7 @@ public class RawFile {
         out.writeUTF(format);
         out.writeLong(schemaId);
         out.writeLong(rowCount);
+        deleteFile.serialize(out);
     }
 
     public static RawFile deserialize(DataInputView in) throws IOException {
@@ -101,8 +121,8 @@ public class RawFile {
         String format = in.readUTF();
         long schemaId = in.readLong();
         long rowCount = in.readLong();
-
-        return new RawFile(path, offset, length, format, schemaId, rowCount);
+        DeleteFile deleteFile = DeleteFile.deserialize(in);
+        return new RawFile(path, offset, length, format, schemaId, rowCount, deleteFile);
     }
 
     @Override
@@ -129,5 +149,91 @@ public class RawFile {
         return String.format(
                 "{path = %s, offset = %d, length = %d, format = %s, schemaId = %d}",
                 path, offset, length, format, schemaId);
+    }
+
+    /** 1. */
+    public static class DeleteFile {
+
+        public static final DeleteFile EMPTY_DELETE_FILE = new DeleteFile("", 0, 0);
+        private final String path;
+        private final int offset;
+        private final int length;
+
+        public DeleteFile(String path, int offset, int length) {
+            this.path = path;
+            this.offset = offset;
+            this.length = length;
+        }
+
+        public String path() {
+            return path;
+        }
+
+        public int offset() {
+            return offset;
+        }
+
+        public int length() {
+            return length;
+        }
+
+        public boolean nonEmpty() {
+            return !this.equals(EMPTY_DELETE_FILE);
+        }
+
+        public void serialize(DataOutputView out) throws IOException {
+            out.writeUTF(path);
+            if (nonEmpty()) {
+                out.writeInt(offset);
+                out.writeInt(length);
+            }
+        }
+
+        public static DeleteFile deserialize(DataInputView in) throws IOException {
+            String path = in.readUTF();
+            if (path.isEmpty()) {
+                return EMPTY_DELETE_FILE;
+            } else {
+                int offset = in.readInt();
+                int length = in.readInt();
+                return new DeleteFile(path, offset, length);
+            }
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            DeleteFile that = (DeleteFile) o;
+            return offset == that.offset
+                    && length == that.length
+                    && Objects.equals(path, that.path);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(path, offset, length);
+        }
+
+        @Override
+        public String toString() {
+            if (nonEmpty()) {
+                return "DeleteFile{"
+                        + "path='"
+                        + path
+                        + '\''
+                        + ", offset="
+                        + offset
+                        + ", length="
+                        + length
+                        + '}';
+            } else {
+                return "DeleteFile{empty}";
+            }
+        }
     }
 }
