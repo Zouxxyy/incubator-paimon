@@ -476,9 +476,10 @@ public class SchemaValidation {
     }
 
     private static void validateForDeleteMap(CoreOptions options) {
-        if (!options.formatType().equals(FileFormatType.PARQUET)) {
+        if (!options.formatType().equals(FileFormatType.ORC)
+                && !options.formatType().equals(FileFormatType.PARQUET)) {
             throw new IllegalArgumentException(
-                    "Delete map is only supported for parquet file format now.");
+                    "Delete map is only supported for orc or parquet file format now.");
         }
 
         if (options.changelogProducer() != ChangelogProducer.NONE

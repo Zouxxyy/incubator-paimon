@@ -72,6 +72,35 @@ class OrcReaderFactoryTest {
                             })
                     .build();
 
+    private static final RowType FLAT_FILE_TYPE_WITH_ROW_POSITION =
+            RowType.builder()
+                    .fields(
+                            new DataType[] {
+                                DataTypes.INT(),
+                                DataTypes.STRING(),
+                                DataTypes.STRING(),
+                                DataTypes.STRING(),
+                                DataTypes.INT(),
+                                DataTypes.STRING(),
+                                DataTypes.INT(),
+                                DataTypes.INT(),
+                                DataTypes.INT(),
+                                DataTypes.BIGINT()
+                            },
+                            new String[] {
+                                "_col0",
+                                "_col1",
+                                "_col2",
+                                "_col3",
+                                "_col4",
+                                "_col5",
+                                "_col6",
+                                "_col7",
+                                "_col8",
+                                "_POSITION"
+                            })
+                    .build();
+
     private static final RowType DECIMAL_FILE_TYPE =
             RowType.builder()
                     .fields(new DataType[] {new DecimalType(10, 5)}, new String[] {"_col0"})
@@ -128,6 +157,34 @@ class OrcReaderFactoryTest {
                     assertThat(row.getString(0).toString()).isNotNull();
                     totalF0.addAndGet(row.getInt(1));
                     assertThat(row.getString(2).toString()).isNotNull();
+                    cnt.incrementAndGet();
+                });
+
+        // check that all rows have been read
+        assertThat(cnt.get()).isEqualTo(1920800);
+        assertThat(totalF0.get()).isEqualTo(1844737280400L);
+    }
+
+    @Test
+    void testReadFileWithRowPosition() throws IOException {
+        OrcReaderFactory format =
+                createFormat(FLAT_FILE_TYPE_WITH_ROW_POSITION, new int[] {2, 0, 1, 9});
+
+        AtomicInteger cnt = new AtomicInteger(0);
+        AtomicLong totalF0 = new AtomicLong(0);
+
+        forEach(
+                format,
+                flatFile,
+                row -> {
+                    assertThat(row.isNullAt(0)).isFalse();
+                    assertThat(row.isNullAt(1)).isFalse();
+                    assertThat(row.isNullAt(2)).isFalse();
+                    assertThat(row.getString(0).toString()).isNotNull();
+                    totalF0.addAndGet(row.getInt(1));
+                    assertThat(row.getString(2).toString()).isNotNull();
+                    // check row position
+                    assertThat(row.getLong(3)).isEqualTo(cnt.get());
                     cnt.incrementAndGet();
                 });
 
