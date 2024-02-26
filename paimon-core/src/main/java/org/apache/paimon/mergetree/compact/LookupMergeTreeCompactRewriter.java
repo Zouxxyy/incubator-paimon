@@ -90,6 +90,10 @@ public class LookupMergeTreeCompactRewriter extends ChangelogMergeTreeRewriter {
             return NO_CHANGELOG;
         }
 
+        if (deleteMapMaintainer != null) {
+            return CHANGELOG_WITH_REWRITE;
+        }
+
         if (outputLevel == maxLevel) {
             return CHANGELOG_NO_REWRITE;
         }
