@@ -216,6 +216,9 @@ public class TestTable {
                 }
             }
 
+            System.out.println(
+                    "actual.size = " + actual.size() + " expected.size = " + expected.size());
+
             if (actual.size() == expected.size()) {
                 assertThat(actual).isEqualTo(expected);
                 break;

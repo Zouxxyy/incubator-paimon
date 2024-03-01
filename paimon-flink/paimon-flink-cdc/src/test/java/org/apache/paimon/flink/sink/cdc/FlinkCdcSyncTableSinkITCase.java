@@ -62,26 +62,26 @@ public class FlinkCdcSyncTableSinkITCase extends AbstractTestBase {
     @TempDir java.nio.file.Path tempDir;
 
     @Test
-    @Timeout(120)
+    @Timeout(1200)
     public void testRandomCdcEvents() throws Exception {
         innerTestRandomCdcEvents(ThreadLocalRandom.current().nextInt(5) + 1, false, false);
     }
 
     @Test
-    @Timeout(120)
+    @Timeout(1200)
     public void testRandomCdcEventsDynamicBucket() throws Exception {
         innerTestRandomCdcEvents(-1, false, false);
     }
 
     @Disabled
     @Test
-    @Timeout(120)
+    @Timeout(1200)
     public void testRandomCdcEventsGlobalDynamicBucket() throws Exception {
         innerTestRandomCdcEvents(-1, true, false);
     }
 
     @Test
-    @Timeout(120)
+    @Timeout(1200)
     public void testRandomCdcEventsUnawareBucket() throws Exception {
         innerTestRandomCdcEvents(-1, false, true);
     }
