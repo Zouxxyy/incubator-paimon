@@ -216,7 +216,7 @@ public class TestTable {
                 }
             }
 
-            // test1
+            // test2
             System.out.println(
                     "actual.size = " + actual.size() + " expected.size = " + expected.size());
 
