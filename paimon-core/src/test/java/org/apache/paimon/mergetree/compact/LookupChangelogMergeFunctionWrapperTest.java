@@ -69,7 +69,9 @@ public class LookupChangelogMergeFunctionWrapperTest {
                                 RowType.of(DataTypes.INT())),
                         highLevel::get,
                         EQUALISER,
-                        changelogRowDeduplicate);
+                        changelogRowDeduplicate,
+                        CoreOptions.LookupStrategy.CHANGELOG_ONLY,
+                        null);
 
         // Without level-0
         function.reset();
@@ -225,7 +227,9 @@ public class LookupChangelogMergeFunctionWrapperTest {
                                 RowType.of(DataTypes.INT())),
                         key -> null,
                         EQUALISER,
-                        changelogRowDeduplicate);
+                        changelogRowDeduplicate,
+                        CoreOptions.LookupStrategy.CHANGELOG_ONLY,
+                        null);
 
         // Without level-0
         function.reset();
@@ -384,7 +388,9 @@ public class LookupChangelogMergeFunctionWrapperTest {
                                 RowType.of(DataTypes.INT())),
                         key -> null,
                         EQUALISER,
-                        false);
+                        false,
+                        CoreOptions.LookupStrategy.CHANGELOG_ONLY,
+                        null);
 
         function.reset();
         function.add(new KeyValue().replace(row(1), 1, DELETE, row(1)).setLevel(2));

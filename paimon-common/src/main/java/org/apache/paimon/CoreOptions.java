@@ -1089,6 +1089,15 @@ public class CoreOptions implements Serializable {
                     .defaultValue(MemorySize.ofMebiBytes(10))
                     .withDescription("The threshold for read file async.");
 
+    public static final ConfigOption<Boolean> DELETION_VECTORS_ENABLED =
+            key("deletion-vectors.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether to enable deletion vectors mode. In this mode, index files containing deletion"
+                                    + " vectors are generated when data is written, which marks the data for deletion."
+                                    + " During read operations, by applying these index files, merging can be avoided.");
+
     private final Options options;
 
     public CoreOptions(Map<String, String> options) {
@@ -1391,6 +1400,48 @@ public class CoreOptions implements Serializable {
         return options.get(CHANGELOG_PRODUCER);
     }
 
+    public boolean requireLookup() {
+        return !lookupStrategy().equals(LookupStrategy.NO_LOOKUP);
+    }
+
+    public LookupStrategy lookupStrategy() {
+        return LookupStrategy.from(
+                options.get(CHANGELOG_PRODUCER).equals(ChangelogProducer.LOOKUP),
+                deletionVectorsEnabled());
+    }
+
+    /** Strategy for lookup. */
+    public enum LookupStrategy {
+        NO_LOOKUP(false, false),
+        CHANGELOG_ONLY(true, false),
+        DELETION_VECTOR_ONLY(false, true),
+        CHANGELOG_AND_DELETION_VECTOR(true, true);
+
+        // write changelog
+        public final boolean changelog;
+
+        // write deletion vector
+        public final boolean deletionVector;
+
+        LookupStrategy(boolean changelog, boolean deletionVector) {
+            this.changelog = changelog;
+            this.deletionVector = deletionVector;
+        }
+
+        public static LookupStrategy from(boolean changelog, boolean deletionVector) {
+            for (LookupStrategy strategy : values()) {
+                if (strategy.changelog == changelog && strategy.deletionVector == deletionVector) {
+                    return strategy;
+                }
+            }
+            throw new IllegalArgumentException(
+                    "Invalid combination of changelog : "
+                            + changelog
+                            + " and deletionVector : "
+                            + deletionVector);
+        }
+    }
+
     public boolean changelogRowDeduplicate() {
         return options.get(CHANGELOG_PRODUCER_ROW_DEDUPLICATE);
     }
@@ -1650,6 +1701,10 @@ public class CoreOptions implements Serializable {
 
     public int varTypeSize() {
         return options.get(ZORDER_VAR_LENGTH_CONTRIBUTION);
+    }
+
+    public boolean deletionVectorsEnabled() {
+        return options.get(DELETION_VECTORS_ENABLED);
     }
 
     /** Specifies the merge engine for table with primary key. */

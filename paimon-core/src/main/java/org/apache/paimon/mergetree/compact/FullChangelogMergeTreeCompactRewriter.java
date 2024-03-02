@@ -19,6 +19,7 @@
 package org.apache.paimon.mergetree.compact;
 
 import org.apache.paimon.CoreOptions;
+import org.apache.paimon.CoreOptions.LookupStrategy;
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.codegen.RecordEqualiser;
 import org.apache.paimon.data.InternalRow;
@@ -59,7 +60,9 @@ public class FullChangelogMergeTreeCompactRewriter extends ChangelogMergeTreeRew
                 writerFactory,
                 keyComparator,
                 mfFactory,
-                mergeSorter);
+                mergeSorter,
+                LookupStrategy.CHANGELOG_ONLY,
+                null);
         this.valueEqualiser = valueEqualiser;
         this.changelogRowDeduplicate = changelogRowDeduplicate;
     }

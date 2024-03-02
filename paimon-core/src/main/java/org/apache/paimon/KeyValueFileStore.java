@@ -20,6 +20,7 @@ package org.apache.paimon;
 
 import org.apache.paimon.codegen.RecordEqualiser;
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.deletionvectors.DeletionVectorsMaintainer;
 import org.apache.paimon.format.FileFormatDiscover;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.index.HashIndexMaintainer;
@@ -124,7 +125,9 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
                 valueType,
                 newKeyComparator(),
                 mfFactory,
-                newReaderFactoryBuilder());
+                newReaderFactoryBuilder(),
+                options,
+                newIndexFileHandler());
     }
 
     public KeyValueFileReaderFactory.Builder newReaderFactoryBuilder() {
@@ -151,6 +154,11 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
         if (bucketMode() == BucketMode.DYNAMIC) {
             indexFactory = new HashIndexMaintainer.Factory(newIndexFileHandler());
         }
+        DeletionVectorsMaintainer.Factory deletionVectorsMaintainerFactory = null;
+        if (options.deletionVectorsEnabled()) {
+            deletionVectorsMaintainerFactory =
+                    new DeletionVectorsMaintainer.Factory(newIndexFileHandler());
+        }
         return new KeyValueFileStoreWrite(
                 fileIO,
                 schemaManager,
@@ -166,6 +174,7 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
                 snapshotManager(),
                 newScan(true, DEFAULT_MAIN_BRANCH).withManifestCacheFilter(manifestFilter),
                 indexFactory,
+                deletionVectorsMaintainerFactory,
                 options,
                 keyValueFieldsExtractor,
                 tableName);

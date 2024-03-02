@@ -19,6 +19,7 @@
 package org.apache.paimon.operation;
 
 import org.apache.paimon.CoreOptions;
+import org.apache.paimon.deletionvectors.DeletionVectorsMaintainer;
 import org.apache.paimon.index.IndexMaintainer;
 import org.apache.paimon.io.cache.CacheManager;
 import org.apache.paimon.memory.HeapMemorySegmentPool;
@@ -61,6 +62,7 @@ public abstract class MemoryFileStoreWrite<T> extends AbstractFileStoreWrite<T> 
             FileStoreScan scan,
             CoreOptions options,
             @Nullable IndexMaintainer.Factory<T> indexFactory,
+            @Nullable DeletionVectorsMaintainer.Factory deletionVectorsMaintainerFactory,
             String tableName,
             FileStorePathFactory pathFactory) {
         super(
@@ -68,6 +70,7 @@ public abstract class MemoryFileStoreWrite<T> extends AbstractFileStoreWrite<T> 
                 snapshotManager,
                 scan,
                 indexFactory,
+                deletionVectorsMaintainerFactory,
                 tableName,
                 pathFactory,
                 options.writeMaxWritersToSpill());

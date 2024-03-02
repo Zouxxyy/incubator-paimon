@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.apache.paimon.CoreOptions.DELETION_VECTORS_ENABLED;
 import static org.apache.paimon.CoreOptions.FULL_COMPACTION_DELTA_COMMITS;
 import static org.apache.paimon.flink.FlinkConnectorOptions.CHANGELOG_PRODUCER_FULL_COMPACTION_TRIGGER_INTERVAL;
 import static org.apache.paimon.flink.FlinkConnectorOptions.CHANGELOG_PRODUCER_LOOKUP_WAIT;
@@ -241,9 +242,9 @@ public class MultiTablesStoreCompactOperator
             CoreOptions.ChangelogProducer changelogProducer =
                     fileStoreTable.coreOptions().changelogProducer();
             waitCompaction =
-                    changelogProducer == CoreOptions.ChangelogProducer.LOOKUP
-                            && options.get(CHANGELOG_PRODUCER_LOOKUP_WAIT);
-
+                    (changelogProducer == CoreOptions.ChangelogProducer.LOOKUP
+                                    && options.get(CHANGELOG_PRODUCER_LOOKUP_WAIT))
+                            || options.get(DELETION_VECTORS_ENABLED);
             int deltaCommits = -1;
             if (options.contains(FULL_COMPACTION_DELTA_COMMITS)) {
                 deltaCommits = options.get(FULL_COMPACTION_DELTA_COMMITS);

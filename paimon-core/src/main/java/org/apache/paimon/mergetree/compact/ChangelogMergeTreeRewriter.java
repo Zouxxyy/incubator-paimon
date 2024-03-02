@@ -18,10 +18,12 @@
 
 package org.apache.paimon.mergetree.compact;
 
+import org.apache.paimon.CoreOptions.LookupStrategy;
 import org.apache.paimon.CoreOptions.MergeEngine;
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.compact.CompactResult;
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.deletionvectors.DeletionVectorsMaintainer;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.KeyValueFileReaderFactory;
 import org.apache.paimon.io.KeyValueFileWriterFactory;
@@ -30,6 +32,8 @@ import org.apache.paimon.mergetree.MergeSorter;
 import org.apache.paimon.mergetree.MergeTreeReaders;
 import org.apache.paimon.mergetree.SortedRun;
 import org.apache.paimon.reader.RecordReaderIterator;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,6 +48,8 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
 
     protected final int maxLevel;
     protected final MergeEngine mergeEngine;
+    protected final LookupStrategy lookupStrategy;
+    protected final @Nullable DeletionVectorsMaintainer deletionVectorsMaintainer;
 
     public ChangelogMergeTreeRewriter(
             int maxLevel,
@@ -52,10 +58,14 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
             KeyValueFileWriterFactory writerFactory,
             Comparator<InternalRow> keyComparator,
             MergeFunctionFactory<KeyValue> mfFactory,
-            MergeSorter mergeSorter) {
+            MergeSorter mergeSorter,
+            LookupStrategy lookupStrategy,
+            @Nullable DeletionVectorsMaintainer deletionVectorsMaintainer) {
         super(readerFactory, writerFactory, keyComparator, mfFactory, mergeSorter);
         this.maxLevel = maxLevel;
         this.mergeEngine = mergeEngine;
+        this.lookupStrategy = lookupStrategy;
+        this.deletionVectorsMaintainer = deletionVectorsMaintainer;
     }
 
     protected abstract boolean rewriteChangelog(
@@ -125,7 +135,9 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
             if (rewriteCompactFile) {
                 compactFileWriter = writerFactory.createRollingMergeTreeFileWriter(outputLevel);
             }
-            changelogFileWriter = writerFactory.createRollingChangelogFileWriter(outputLevel);
+            if (lookupStrategy.changelog) {
+                changelogFileWriter = writerFactory.createRollingChangelogFileWriter(outputLevel);
+            }
 
             while (iterator.hasNext()) {
                 ChangelogResult result = iterator.next();
@@ -133,8 +145,10 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
                 if (rewriteCompactFile && keyValue != null && (!dropDelete || keyValue.isAdd())) {
                     compactFileWriter.write(keyValue);
                 }
-                for (KeyValue kv : result.changelogs()) {
-                    changelogFileWriter.write(kv);
+                if (lookupStrategy.changelog) {
+                    for (KeyValue kv : result.changelogs()) {
+                        changelogFileWriter.write(kv);
+                    }
                 }
             }
         } finally {
@@ -157,7 +171,16 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
                                 .map(x -> x.upgrade(outputLevel))
                                 .collect(Collectors.toList());
 
-        return new CompactResult(before, after, changelogFileWriter.result());
+        if (deletionVectorsMaintainer != null) {
+            for (DataFileMeta dataFileMeta : before) {
+                deletionVectorsMaintainer.removeDeletionVectorOf(dataFileMeta.fileName());
+            }
+        }
+
+        return new CompactResult(
+                before,
+                after,
+                lookupStrategy.changelog ? changelogFileWriter.result() : Collections.emptyList());
     }
 
     @Override
@@ -168,7 +191,7 @@ public abstract class ChangelogMergeTreeRewriter extends MergeTreeCompactRewrite
                     outputLevel,
                     Collections.singletonList(
                             Collections.singletonList(SortedRun.fromSingle(file))),
-                    false,
+                    lookupStrategy.deletionVector,
                     strategy.rewrite);
         } else {
             return super.upgrade(outputLevel, file);

@@ -183,6 +183,7 @@ public class TestChangelogDataReadWrite {
                                 snapshotManager,
                                 null, // not used, we only create an empty writer
                                 null,
+                                null,
                                 options,
                                 EXTRACTOR,
                                 tablePath.getName())

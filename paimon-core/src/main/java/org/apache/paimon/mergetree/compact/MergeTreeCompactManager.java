@@ -57,6 +57,7 @@ public class MergeTreeCompactManager extends CompactFutureManager {
     private final CompactRewriter rewriter;
 
     @Nullable private final CompactionMetrics metrics;
+    private final boolean deletionVectorsEnabled;
 
     public MergeTreeCompactManager(
             ExecutorService executor,
@@ -66,7 +67,8 @@ public class MergeTreeCompactManager extends CompactFutureManager {
             long compactionFileSize,
             int numSortedRunStopTrigger,
             CompactRewriter rewriter,
-            @Nullable CompactionMetrics metrics) {
+            @Nullable CompactionMetrics metrics,
+            boolean deletionVectorsEnabled) {
         this.executor = executor;
         this.levels = levels;
         this.strategy = strategy;
@@ -75,6 +77,7 @@ public class MergeTreeCompactManager extends CompactFutureManager {
         this.keyComparator = keyComparator;
         this.rewriter = rewriter;
         this.metrics = metrics;
+        this.deletionVectorsEnabled = deletionVectorsEnabled;
         reportLevel0FileCount();
     }
 
@@ -143,7 +146,8 @@ public class MergeTreeCompactManager extends CompactFutureManager {
                      */
                     boolean dropDelete =
                             unit.outputLevel() != 0
-                                    && unit.outputLevel() >= levels.nonEmptyHighestLevel();
+                                    && (unit.outputLevel() >= levels.nonEmptyHighestLevel()
+                                            || deletionVectorsEnabled);
 
                     if (LOG.isDebugEnabled()) {
                         LOG.debug(

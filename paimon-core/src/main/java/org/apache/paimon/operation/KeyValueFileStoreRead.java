@@ -21,11 +21,14 @@ package org.apache.paimon.operation;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.KeyValueFileStore;
+import org.apache.paimon.annotation.VisibleForTesting;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.deletionvectors.DeletionVectorsIndexFile;
 import org.apache.paimon.disk.IOManager;
 import org.apache.paimon.format.FileFormatDiscover;
 import org.apache.paimon.fs.FileIO;
+import org.apache.paimon.index.IndexFileHandler;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.KeyValueFileReaderFactory;
 import org.apache.paimon.mergetree.DropDeleteReader;
@@ -61,6 +64,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.paimon.io.DataFilePathFactory.CHANGELOG_FILE_PREFIX;
+import static org.apache.paimon.mergetree.MergeTreeReaders.readerForRun;
 import static org.apache.paimon.predicate.PredicateBuilder.containsFields;
 import static org.apache.paimon.predicate.PredicateBuilder.splitAnd;
 
@@ -81,9 +85,12 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
 
     @Nullable private int[][] pushdownProjection;
     @Nullable private int[][] outerProjection;
+    private final CoreOptions options;
+    private final IndexFileHandler indexFileHandler;
 
     private boolean forceKeepDelete = false;
 
+    @VisibleForTesting
     public KeyValueFileStoreRead(
             FileIO fileIO,
             SchemaManager schemaManager,
@@ -112,7 +119,9 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
                         formatDiscover,
                         pathFactory,
                         extractor,
-                        options));
+                        options),
+                options,
+                null);
     }
 
     public KeyValueFileStoreRead(
@@ -122,7 +131,9 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
             RowType valueType,
             Comparator<InternalRow> keyComparator,
             MergeFunctionFactory<KeyValue> mfFactory,
-            KeyValueFileReaderFactory.Builder readerFactoryBuilder) {
+            KeyValueFileReaderFactory.Builder readerFactoryBuilder,
+            CoreOptions options,
+            IndexFileHandler indexFileHandler) {
         this.tableSchema = schemaManager.schema(schemaId);
         this.readerFactoryBuilder = readerFactoryBuilder;
         this.keyComparator = keyComparator;
@@ -130,6 +141,8 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
         this.mergeSorter =
                 new MergeSorter(
                         CoreOptions.fromMap(tableSchema.options()), keyType, valueType, null);
+        this.options = options;
+        this.indexFileHandler = indexFileHandler;
     }
 
     public KeyValueFileStoreRead withKeyProjection(int[][] projectedFields) {
@@ -206,6 +219,20 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
 
     private RecordReader<KeyValue> createReaderWithoutOuterProjection(DataSplit split)
             throws IOException {
+        if (options.deletionVectorsEnabled()) {
+            indexFileHandler
+                    .scan(
+                            split.snapshotId(),
+                            DeletionVectorsIndexFile.DELETION_VECTORS_INDEX,
+                            split.partition(),
+                            split.bucket())
+                    .ifPresent(
+                            fileMeta ->
+                                    readerFactoryBuilder.withDeletionVectorSupplier(
+                                            filename ->
+                                                    indexFileHandler.readDeletionVector(
+                                                            fileMeta, filename)));
+        }
         if (split.isStreaming()) {
             KeyValueFileReaderFactory readerFactory =
                     readerFactoryBuilder.build(
@@ -247,16 +274,27 @@ public class KeyValueFileStoreRead implements FileStoreRead<KeyValue> {
         MergeFunctionWrapper<KeyValue> mergeFuncWrapper =
                 new ReducerMergeFunctionWrapper(mfFactory.create(pushdownProjection));
         for (List<SortedRun> section : new IntervalPartition(files, keyComparator).partition()) {
-            sectionReaders.add(
-                    () ->
-                            MergeTreeReaders.readerForSection(
-                                    section,
-                                    section.size() > 1
-                                            ? overlappedSectionFactory
-                                            : nonOverlappedSectionFactory,
-                                    keyComparator,
-                                    mergeFuncWrapper,
-                                    mergeSorter));
+            if (options.deletionVectorsEnabled()) {
+                sectionReaders.add(
+                        () -> {
+                            List<ReaderSupplier<KeyValue>> readers = new ArrayList<>();
+                            for (SortedRun run : section) {
+                                readers.add(() -> readerForRun(run, nonOverlappedSectionFactory));
+                            }
+                            return ConcatRecordReader.create(readers);
+                        });
+            } else {
+                sectionReaders.add(
+                        () ->
+                                MergeTreeReaders.readerForSection(
+                                        section,
+                                        section.size() > 1
+                                                ? overlappedSectionFactory
+                                                : nonOverlappedSectionFactory,
+                                        keyComparator,
+                                        mergeFuncWrapper,
+                                        mergeSorter));
+            }
         }
 
         RecordReader<KeyValue> reader = ConcatRecordReader.create(sectionReaders);
