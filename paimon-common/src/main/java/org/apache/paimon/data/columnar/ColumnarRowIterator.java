@@ -45,7 +45,7 @@ public class ColumnarRowIterator extends RecyclableIterator<InternalRow>
         super(recycler);
         this.rowData = rowData;
         this.recycler = recycler;
-        this.rowPosition = 0;
+        this.rowPosition = -1;
     }
 
     /** Reset the number of rows in the vectorized batch and the start position in this batch. */
@@ -59,7 +59,7 @@ public class ColumnarRowIterator extends RecyclableIterator<InternalRow>
      * position after reset is strictly incremented by 1.
      */
     public void resetRowPosition(long rowPosition) {
-        this.rowPosition = rowPosition;
+        this.rowPosition = rowPosition - 1;
     }
 
     @Nullable
