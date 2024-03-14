@@ -51,7 +51,7 @@ class PaimonSparkTestBase extends QueryTest with SharedSparkSession with WithTab
 
   /** Add paimon ([[SparkCatalog]] in fileSystem) catalog */
   override protected def sparkConf: SparkConf = {
-    val serializer = if (Random.nextBoolean()) {
+    val serializer = if (true) {
       "org.apache.spark.serializer.KryoSerializer"
     } else {
       "org.apache.spark.serializer.JavaSerializer"
