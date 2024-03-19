@@ -274,18 +274,24 @@ public class SnapshotReaderImpl implements SnapshotReader {
                                 .withPartition(partition)
                                 .withBucket(bucket)
                                 .isStreaming(isStreaming);
-                List<List<DataFileMeta>> splitGroups =
+                List<SplitGenerator.SplitGroup> splitGroups =
                         isStreaming
                                 ? splitGenerator.splitForStreaming(bucketFiles)
                                 : splitGenerator.splitForBatch(bucketFiles);
-                for (List<DataFileMeta> dataFiles : splitGroups) {
-                    builder.withDataFiles(dataFiles)
-                            .rawFiles(convertToRawFiles(partition, bucket, dataFiles));
-                    if (deletionVectors) {
-                        IndexFileMeta deletionIndexFile =
-                                indexFileHandler
+                IndexFileMeta deletionIndexFile =
+                        deletionVectors
+                                ? indexFileHandler
                                         .scan(snapshotId, DELETION_VECTORS_INDEX, partition, bucket)
-                                        .orElse(null);
+                                        .orElse(null)
+                                : null;
+                for (SplitGenerator.SplitGroup splitGroup : splitGroups) {
+                    List<DataFileMeta> dataFiles = splitGroup.files();
+                    builder.withDataFiles(dataFiles)
+                            .rawFiles(
+                                    convertToRawFiles(
+                                            partition, bucket, dataFiles, splitGroup.noMergeRead()))
+                            .noMergeRead(splitGroup.noMergeRead());
+                    if (deletionVectors) {
                         builder.withDataDeletionFiles(
                                 getDeletionFiles(dataFiles, deletionIndexFile));
                     }
@@ -367,7 +373,8 @@ public class SnapshotReaderImpl implements SnapshotReader {
                                 .withBeforeFiles(before)
                                 .withDataFiles(data)
                                 .isStreaming(isStreaming)
-                                .rawFiles(convertToRawFiles(part, bucket, data));
+                                .noMergeRead(isStreaming)
+                                .rawFiles(convertToRawFiles(part, bucket, data, isStreaming));
                 if (deletionVectors) {
                     IndexFileMeta beforeDeletionIndex =
                             indexFileHandler
@@ -431,11 +438,10 @@ public class SnapshotReaderImpl implements SnapshotReader {
     }
 
     private List<RawFile> convertToRawFiles(
-            BinaryRow partition, int bucket, List<DataFileMeta> dataFiles) {
+            BinaryRow partition, int bucket, List<DataFileMeta> dataFiles, boolean noMergeRead) {
         String bucketPath = pathFactory.bucketPath(partition, bucket).toString();
 
-        // append only or deletionVectors files can be returned
-        if (tableSchema.primaryKeys().isEmpty() || deletionVectors) {
+        if (tableSchema.primaryKeys().isEmpty() || noMergeRead) {
             return makeRawTableFiles(bucketPath, dataFiles);
         }
 

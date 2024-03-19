@@ -44,7 +44,7 @@ public class KeyValueFileStoreScan extends AbstractFileStoreScan {
 
     private Predicate keyFilter;
     private Predicate valueFilter;
-    private final boolean deletionVectorsEnabled;
+    private final boolean noMergeRead;
 
     public KeyValueFileStoreScan(
             RowType partitionType,
@@ -59,7 +59,7 @@ public class KeyValueFileStoreScan extends AbstractFileStoreScan {
             boolean checkNumOfBuckets,
             Integer scanManifestParallelism,
             String branchName,
-            boolean deletionVectorsEnabled) {
+            boolean noMergeRead) {
         super(
                 partitionType,
                 bucketFilter,
@@ -80,7 +80,7 @@ public class KeyValueFileStoreScan extends AbstractFileStoreScan {
                 new FieldStatsConverters(
                         sid -> keyValueFieldsExtractor.valueFields(scanTableSchema(sid)),
                         schema.id());
-        this.deletionVectorsEnabled = deletionVectorsEnabled;
+        this.noMergeRead = noMergeRead;
     }
 
     public KeyValueFileStoreScan withKeyFilter(Predicate predicate) {
@@ -100,7 +100,7 @@ public class KeyValueFileStoreScan extends AbstractFileStoreScan {
         Predicate filter = null;
         FieldStatsArraySerializer serializer = null;
         BinaryTableStats stats = null;
-        if (deletionVectorsEnabled && entry.level() > 0 && valueFilter != null) {
+        if (noMergeRead && entry.level() > 0 && valueFilter != null) {
             filter = valueFilter;
             serializer = fieldValueStatsConverters.getOrCreate(entry.file().schemaId());
             stats = entry.file().valueStats();

@@ -25,6 +25,7 @@ import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.PlanImpl;
 import org.apache.paimon.table.source.ScanMode;
+import org.apache.paimon.table.source.SplitGenerator;
 import org.apache.paimon.utils.Pair;
 import org.apache.paimon.utils.SnapshotManager;
 
@@ -37,9 +38,9 @@ import java.util.Map;
 /** {@link StartingScanner} for incremental changes by snapshot. */
 public class IncrementalStartingScanner extends AbstractStartingScanner {
 
-    private long endingSnapshotId;
+    private final long endingSnapshotId;
 
-    private ScanMode scanMode;
+    private final ScanMode scanMode;
 
     public IncrementalStartingScanner(
             SnapshotManager snapshotManager, long start, long end, ScanMode scanMode) {
@@ -65,7 +66,7 @@ public class IncrementalStartingScanner extends AbstractStartingScanner {
         for (Map.Entry<Pair<BinaryRow, Integer>, List<DataFileMeta>> entry : grouped.entrySet()) {
             BinaryRow partition = entry.getKey().getLeft();
             int bucket = entry.getKey().getRight();
-            for (List<DataFileMeta> files :
+            for (SplitGenerator.SplitGroup splitGroup :
                     reader.splitGenerator().splitForBatch(entry.getValue())) {
                 // TODO pass deletion files
                 result.add(
@@ -73,7 +74,8 @@ public class IncrementalStartingScanner extends AbstractStartingScanner {
                                 .withSnapshot(endingSnapshotId)
                                 .withPartition(partition)
                                 .withBucket(bucket)
-                                .withDataFiles(files)
+                                .noMergeRead(scanMode == ScanMode.CHANGELOG)
+                                .withDataFiles(splitGroup.files())
                                 .build());
             }
         }

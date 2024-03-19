@@ -1671,6 +1671,10 @@ public class CoreOptions implements Serializable {
         return options.get(DELETION_VECTORS_ENABLED);
     }
 
+    public boolean noMergeRead() {
+        return deletionVectorsEnabled() || mergeEngine().equals(MergeEngine.FIRST_ROW);
+    }
+
     /** Specifies the merge engine for table with primary key. */
     public enum MergeEngine implements DescribedEnum {
         DEDUPLICATE("deduplicate", "De-duplicate and keep the last row."),

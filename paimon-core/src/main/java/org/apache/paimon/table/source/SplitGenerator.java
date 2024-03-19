@@ -25,7 +25,34 @@ import java.util.List;
 /** Generate splits from {@link DataFileMeta}s. */
 public interface SplitGenerator {
 
-    List<List<DataFileMeta>> splitForBatch(List<DataFileMeta> files);
+    List<SplitGroup> splitForBatch(List<DataFileMeta> files);
 
-    List<List<DataFileMeta>> splitForStreaming(List<DataFileMeta> files);
+    List<SplitGroup> splitForStreaming(List<DataFileMeta> files);
+
+    /** Split group. */
+    class SplitGroup {
+        final List<DataFileMeta> files;
+        final boolean noMergeRead;
+
+        public List<DataFileMeta> files() {
+            return files;
+        }
+
+        public boolean noMergeRead() {
+            return noMergeRead;
+        }
+
+        private SplitGroup(List<DataFileMeta> files, boolean noMergeRead) {
+            this.files = files;
+            this.noMergeRead = noMergeRead;
+        }
+
+        public static SplitGroup noMergeGroup(List<DataFileMeta> files) {
+            return new SplitGroup(files, true);
+        }
+
+        public static SplitGroup mergeGroup(List<DataFileMeta> files) {
+            return new SplitGroup(files, false);
+        }
+    }
 }

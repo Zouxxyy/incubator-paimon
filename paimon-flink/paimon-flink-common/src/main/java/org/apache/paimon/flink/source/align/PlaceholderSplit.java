@@ -47,6 +47,7 @@ public class PlaceholderSplit extends DataSplit {
                         .withDataFiles(Collections.emptyList())
                         .withPartition(BinaryRow.EMPTY_ROW)
                         .isStreaming(true)
+                        .noMergeRead(true)
                         .build();
     }
 
@@ -82,6 +83,10 @@ public class PlaceholderSplit extends DataSplit {
     @Override
     public boolean isStreaming() {
         return dataSplit.isStreaming();
+    }
+
+    public boolean noMergeRead() {
+        return dataSplit.noMergeRead();
     }
 
     @Override

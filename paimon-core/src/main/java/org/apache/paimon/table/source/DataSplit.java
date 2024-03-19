@@ -48,6 +48,7 @@ public class DataSplit implements Split {
 
     private long snapshotId = 0;
     private boolean isStreaming = false;
+    private boolean noMergeRead = false;
     private List<DataFileMeta> beforeFiles = new ArrayList<>();
     @Nullable private List<DeletionFile> beforeDeletionFiles;
 
@@ -93,6 +94,10 @@ public class DataSplit implements Split {
         return isStreaming;
     }
 
+    public boolean noMergeRead() {
+        return noMergeRead;
+    }
+
     public OptionalLong getLatestFileCreationEpochMillis() {
         return this.dataFiles.stream().mapToLong(DataFileMeta::creationTimeEpochMillis).max();
     }
@@ -131,6 +136,7 @@ public class DataSplit implements Split {
                 && Objects.equals(dataFiles, split.dataFiles)
                 && Objects.equals(dataDeletionFiles, split.dataDeletionFiles)
                 && isStreaming == split.isStreaming
+                && noMergeRead == split.noMergeRead
                 && Objects.equals(rawFiles, split.rawFiles);
     }
 
@@ -144,6 +150,7 @@ public class DataSplit implements Split {
                 dataFiles,
                 dataDeletionFiles,
                 isStreaming,
+                noMergeRead,
                 rawFiles);
     }
 
@@ -164,6 +171,7 @@ public class DataSplit implements Split {
         this.dataFiles = other.dataFiles;
         this.dataDeletionFiles = other.dataDeletionFiles;
         this.isStreaming = other.isStreaming;
+        this.noMergeRead = other.noMergeRead;
         this.rawFiles = other.rawFiles;
     }
 
@@ -188,6 +196,8 @@ public class DataSplit implements Split {
         DeletionFile.serializeList(out, dataDeletionFiles);
 
         out.writeBoolean(isStreaming);
+
+        out.writeBoolean(noMergeRead);
 
         out.writeInt(rawFiles.size());
         for (RawFile rawFile : rawFiles) {
@@ -219,6 +229,8 @@ public class DataSplit implements Split {
 
         boolean isStreaming = in.readBoolean();
 
+        boolean noMergeRead = in.readBoolean();
+
         int rawFileNum = in.readInt();
         List<RawFile> rawFiles = new ArrayList<>();
         for (int i = 0; i < rawFileNum; i++) {
@@ -233,6 +245,7 @@ public class DataSplit implements Split {
                         .withBeforeFiles(beforeFiles)
                         .withDataFiles(dataFiles)
                         .isStreaming(isStreaming)
+                        .noMergeRead(noMergeRead)
                         .rawFiles(rawFiles);
         if (beforeDeletionFiles != null) {
             builder.withBeforeDeletionFiles(beforeDeletionFiles);
@@ -289,6 +302,11 @@ public class DataSplit implements Split {
 
         public Builder isStreaming(boolean isStreaming) {
             this.split.isStreaming = isStreaming;
+            return this;
+        }
+
+        public Builder noMergeRead(boolean noMergeRead) {
+            this.split.noMergeRead = noMergeRead;
             return this;
         }
 

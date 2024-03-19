@@ -27,7 +27,9 @@ import org.apache.paimon.utils.BinPacking;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -40,25 +42,32 @@ public class MergeTreeSplitGenerator implements SplitGenerator {
 
     private final long openFileCost;
 
-    private final boolean deletionVectorsEnabled;
+    private final boolean noMergeRead;
 
     public MergeTreeSplitGenerator(
             Comparator<InternalRow> keyComparator,
             long targetSplitSize,
             long openFileCost,
-            boolean deletionVectorsEnabled) {
+            boolean noMergeRead) {
         this.keyComparator = keyComparator;
         this.targetSplitSize = targetSplitSize;
         this.openFileCost = openFileCost;
-        this.deletionVectorsEnabled = deletionVectorsEnabled;
+        this.noMergeRead = noMergeRead;
     }
 
     @Override
-    public List<List<DataFileMeta>> splitForBatch(List<DataFileMeta> files) {
-        if (deletionVectorsEnabled) {
+    public List<SplitGroup> splitForBatch(List<DataFileMeta> files) {
+        Set<Integer> levels = new HashSet<>();
+        for (DataFileMeta file : files) {
+            levels.add(file.level());
+        }
+
+        if (!levels.contains(0) && (noMergeRead || levels.size() == 1)) {
             Function<DataFileMeta, Long> weightFunc =
                     file -> Math.max(file.fileSize(), openFileCost);
-            return BinPacking.packForOrdered(files, weightFunc, targetSplitSize);
+            return BinPacking.packForOrdered(files, weightFunc, targetSplitSize).stream()
+                    .map(SplitGroup::noMergeGroup)
+                    .collect(Collectors.toList());
         }
 
         /*
@@ -86,13 +95,19 @@ public class MergeTreeSplitGenerator implements SplitGenerator {
                 new IntervalPartition(files, keyComparator)
                         .partition().stream().map(this::flatRun).collect(Collectors.toList());
 
-        return packSplits(sections);
+        return packSplits(sections).stream()
+                .map(
+                        f ->
+                                f.size() == 1 && f.get(0).level() != 0
+                                        ? SplitGroup.noMergeGroup(f)
+                                        : SplitGroup.mergeGroup(f))
+                .collect(Collectors.toList());
     }
 
     @Override
-    public List<List<DataFileMeta>> splitForStreaming(List<DataFileMeta> files) {
+    public List<SplitGroup> splitForStreaming(List<DataFileMeta> files) {
         // We don't split streaming scan files
-        return Collections.singletonList(files);
+        return Collections.singletonList(SplitGroup.noMergeGroup(files));
     }
 
     private List<List<DataFileMeta>> packSplits(List<List<DataFileMeta>> sections) {

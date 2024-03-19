@@ -72,7 +72,12 @@ public class IncrementalStartingScannerTest extends ScannerTestBase {
         assertThat(changeLogResult.currentSnapshotId()).isEqualTo(4);
         assertThat(getResult(table.newRead(), toSplits(changeLogResult.splits())))
                 .hasSameElementsAs(
-                        Arrays.asList("+I 2|20|200", "+I 1|10|100", "+I 3|40|400", "+U 3|40|500"));
+                        Arrays.asList(
+                                "+I 2|20|200",
+                                "+I 1|10|100",
+                                "+I 3|40|400",
+                                "-U 3|40|400",
+                                "+U 3|40|500"));
 
         write.close();
         commit.close();
