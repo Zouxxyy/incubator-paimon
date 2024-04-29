@@ -84,7 +84,7 @@ abstract class AbstractFileStoreTable implements FileStoreTable {
     protected final FileIO fileIO;
     protected final Path path;
     protected final TableSchema tableSchema;
-    protected final CatalogEnvironment catalogEnvironment;
+    protected final transient CatalogEnvironment catalogEnvironment;
 
     protected AbstractFileStoreTable(
             FileIO fileIO,
