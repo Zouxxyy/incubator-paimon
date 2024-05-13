@@ -24,6 +24,8 @@ import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.Table;
 
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
 import org.apache.spark.sql.connector.catalog.SupportsWrite;
 import org.apache.spark.sql.connector.catalog.TableCapability;
@@ -34,18 +36,27 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.WriteBuilder;
+import org.apache.spark.sql.execution.datasources.FileFormat;
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat;
+import org.apache.spark.sql.execution.datasources.v2.FileTable;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import scala.Option;
+import scala.collection.JavaConverters;
+import scala.collection.Seq;
+
 /** A spark {@link org.apache.spark.sql.connector.catalog.Table} for paimon. */
-public class SparkTable
+public class SparkTable extends FileTable
         implements org.apache.spark.sql.connector.catalog.Table,
                 SupportsRead,
                 SupportsWrite,
@@ -54,7 +65,18 @@ public class SparkTable
     private final Table table;
 
     public SparkTable(Table table) {
+        super(
+                SparkSession.active(),
+                new CaseInsensitiveStringMap(table.options()),
+                pathSeq(table.options().get("path")),
+                Option.empty());
         this.table = table;
+    }
+
+    public static Seq<String> pathSeq(String a) {
+        List<String> javaList = new ArrayList<>();
+        javaList.add(a);
+        return JavaConverters.asScalaBufferConverter(javaList).asScala().toList();
     }
 
     public Table getTable() {
@@ -86,6 +108,21 @@ public class SparkTable
         capabilities.add(TableCapability.OVERWRITE_DYNAMIC);
         capabilities.add(TableCapability.MICRO_BATCH_READ);
         return capabilities;
+    }
+
+    @Override
+    public Option<StructType> inferSchema(Seq<FileStatus> files) {
+        return Option.apply(SparkTypeUtils.fromPaimonRowType(table.rowType()));
+    }
+
+    @Override
+    public String formatName() {
+        return "paimon";
+    }
+
+    @Override
+    public Class<? extends FileFormat> fallbackFileFormat() {
+        return ParquetFileFormat.class;
     }
 
     @Override
