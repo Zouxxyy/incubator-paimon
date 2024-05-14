@@ -22,9 +22,11 @@ import org.apache.paimon.spark.PaimonHiveTestBase
 
 class NativeWriteTest extends PaimonHiveTestBase {
 
-  test(s"Paimon describe: describe table comment") {
+  import testImplicits._
+
+  test(s"Paimon native write: write") {
     withTable("paimon_tbl", "parquet_tbl") {
-      withSQLConf("spark.sql.sources.useV1SourceList" -> "parquet") {
+      withSQLConf("spark.sql.sources.useV1SourceList" -> "") {
         spark.sql(s"""
                      |CREATE TABLE paimon_tbl (id INT, name STRING, pt STRING) USING PAIMON
                      |  PARTITIONED BY (pt)
@@ -37,7 +39,12 @@ class NativeWriteTest extends PaimonHiveTestBase {
                      |""".stripMargin)
         spark.sql("INSERT INTO parquet_tbl VALUES (1, 'a', 'p1')")
 
-        spark.sql("SELECT * FROM paimon_tbl")
+        spark.sql("CLEAR CACHE")
+
+        checkAnswer(
+          spark.sql("SELECT * FROM paimon_tbl"),
+          Seq((1, "a", "p1")).toDF()
+        )
       }
     }
   }
