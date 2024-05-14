@@ -192,6 +192,7 @@ public class HiveMigrator implements Migrator {
 
                 throw new RuntimeException("Migrating failed because exception happens", e);
             }
+            // 注意
             try (BatchTableCommit commit = paimonTable.newBatchWriteBuilder().newCommit()) {
                 commit.commit(new ArrayList<>(commitMessages));
             }
