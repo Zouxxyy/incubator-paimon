@@ -107,8 +107,14 @@ public class FileStorePathFactory {
     public Path relativePartitionAndBucketPath(BinaryRow partition, int bucket) {
         String partitionPath = getPartitionString(partition);
         if (partitionPath.isEmpty()) {
+            if (bucket == -1) {
+                return new Path("");
+            }
             return new Path(BUCKET_PATH_PREFIX + bucket);
         } else {
+            if (bucket == -1) {
+                return new Path(getPartitionString(partition));
+            }
             return new Path(getPartitionString(partition) + "/" + BUCKET_PATH_PREFIX + bucket);
         }
     }

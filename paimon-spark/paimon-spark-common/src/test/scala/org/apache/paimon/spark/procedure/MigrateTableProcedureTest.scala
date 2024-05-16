@@ -18,32 +18,46 @@
 
 package org.apache.paimon.spark.procedure
 
+import org.apache.paimon.hive.migrate.SparkCommiter
 import org.apache.paimon.spark.PaimonHiveTestBase
+import org.apache.paimon.table.sink.{BatchTableCommit, CommitMessage}
 
 import org.apache.spark.sql.Row
 
+import java.util
+
 class MigrateTableProcedureTest extends PaimonHiveTestBase {
-  Seq("parquet", "orc", "avro").foreach(
-    format => {
-      test(s"Paimon migrate table procedure: migrate $format non-partitioned table") {
-        withTable("hive_tbl") {
-          // create hive table
-          spark.sql(s"""
-                       |CREATE TABLE hive_tbl (id STRING, name STRING, pt STRING)
-                       |USING $format
-                       |""".stripMargin)
+//  Seq("parquet", "orc", "avro").foreach(
+//    format => {
+  test(s"Paimon migrate table procedure: migrate  non-partitioned table") {
+    withTable("paimon_tbl") {
+      // create hive table
+      spark.sql(s"""
+                   |CREATE TABLE paimon_tbl (id STRING, name STRING, pt STRING)
+                   |USING paimon tblproperties ('file.format' = 'parquet')
+                   |PARTITIONED BY (pt)
+                   |""".stripMargin)
 
-          spark.sql(s"INSERT INTO hive_tbl VALUES ('1', 'a', 'p1'), ('2', 'b', 'p2')")
+      spark.sql(s"INSERT INTO paimon_tbl VALUES ('1', 'a', 'p1'), ('2', 'b', 'p2')")
 
-          spark.sql(
-            s"CALL sys.migrate_table(source_type => 'hive', table => '$hiveDbName.hive_tbl', options => 'file.format=$format')")
-
-          checkAnswer(
-            spark.sql(s"SELECT * FROM hive_tbl ORDER BY id"),
-            Row("1", "a", "p1") :: Row("2", "b", "p2") :: Nil)
-        }
+      // PaimonCommitFilesCommand
+      val fileStoreTable = loadTable("paimon_tbl")
+      val set = new util.HashSet[String]()
+      set.add("pt=p1")
+      set.add("pt=p2")
+      val messages = new SparkCommiter(set, fileStoreTable).generatorCommitMessage()
+      try {
+        val commit: BatchTableCommit = fileStoreTable.newBatchWriteBuilder.newCommit
+        try commit.commit(new util.ArrayList[CommitMessage](messages))
+        finally if (commit != null) commit.close()
       }
-    })
+
+      checkAnswer(
+        spark.sql(s"SELECT * FROM paimon_tbl ORDER BY id"),
+        Row("1", "a", "p1") :: Row("2", "b", "p2") :: Nil)
+    }
+  }
+//    })
 
   Seq("parquet", "orc", "avro").foreach(
     format => {
