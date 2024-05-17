@@ -18,35 +18,36 @@
 
 package org.apache.paimon.spark.commands
 
-import org.apache.paimon.catalog.{Catalog, CatalogContext, CatalogFactory, Identifier}
 import org.apache.paimon.hive.migrate.SparkCommiter
-import org.apache.paimon.options.Options
-import org.apache.paimon.spark.catalog.Catalogs
+import org.apache.paimon.spark.SparkTable
 import org.apache.paimon.spark.leafnode.PaimonLeafRunnableCommand
 import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.table.sink.{BatchTableCommit, CommitMessage}
 
+import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 
 import java.util
 
 import scala.collection.JavaConverters._
 
-case class PaimonCommitFilesCommand(catalogTable: CatalogTable, partitions: Set[String])
+case class PaimonCommitFilesCommand(path: Path, partitions: Set[String])
   extends PaimonLeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val fileStoreTable = {
-      sparkSession.sessionState.catalogManager.currentCatalog
-      val currentCatalog = sparkSession.sessionState.catalogManager.currentCatalog.name()
-      val options = Catalogs.catalogOptions(currentCatalog, sparkSession.sessionState.conf)
-      val catalogContext =
-        CatalogContext.create(Options.fromMap(options), sparkSession.sessionState.newHadoopConf())
-      val catalog: Catalog = CatalogFactory.createCatalog(catalogContext)
-      catalog
-        .getTable(
-          Identifier.create(catalogTable.identifier.database.get, catalogTable.identifier.table))
+      sparkSession.read
+        .format("paimon")
+        .load(path.toString)
+        .queryExecution
+        .optimizedPlan
+        .collectFirst { case relation: DataSourceV2ScanRelation => relation }
+        .get
+        .relation
+        .table
+        .asInstanceOf[SparkTable]
+        .getTable
         .asInstanceOf[FileStoreTable]
     }
 

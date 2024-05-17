@@ -19,10 +19,12 @@
 package org.apache.paimon.spark.procedure
 
 import org.apache.paimon.hive.migrate.SparkCommiter
-import org.apache.paimon.spark.PaimonHiveTestBase
+import org.apache.paimon.spark.{PaimonHiveTestBase, SparkTable}
+import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.table.sink.{BatchTableCommit, CommitMessage}
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 
 import java.util
 
@@ -42,6 +44,20 @@ class MigrateTableProcedureTest extends PaimonHiveTestBase {
 
       // PaimonCommitFilesCommand
       val fileStoreTable = loadTable("paimon_tbl")
+
+      val table = spark.read
+        .format("paimon")
+        .load(fileStoreTable.location().toString)
+        .queryExecution
+        .optimizedPlan
+        .collectFirst { case relation: DataSourceV2ScanRelation => relation }
+        .get
+        .relation
+        .table
+        .asInstanceOf[SparkTable]
+        .getTable
+        .asInstanceOf[FileStoreTable]
+
       val set = new util.HashSet[String]()
       set.add("pt=p1")
       set.add("pt=p2")
