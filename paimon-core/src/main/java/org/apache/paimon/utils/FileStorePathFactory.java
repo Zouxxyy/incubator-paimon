@@ -101,15 +101,21 @@ public class FileStorePathFactory {
     }
 
     public Path bucketPath(BinaryRow partition, int bucket) {
-        return new Path(root + "/" + relativePartitionAndBucketPath(partition, bucket));
+        return new Path(root + "/" + relativePartitionAndBucketPathString(partition, bucket));
     }
 
-    public Path relativePartitionAndBucketPath(BinaryRow partition, int bucket) {
+    public String relativePartitionAndBucketPathString(BinaryRow partition, int bucket) {
         String partitionPath = getPartitionString(partition);
         if (partitionPath.isEmpty()) {
-            return new Path(BUCKET_PATH_PREFIX + bucket);
+            if (bucket == -1) {
+                return "";
+            }
+            return BUCKET_PATH_PREFIX + bucket;
         } else {
-            return new Path(getPartitionString(partition) + "/" + BUCKET_PATH_PREFIX + bucket);
+            if (bucket == -1) {
+                return getPartitionString(partition);
+            }
+            return getPartitionString(partition) + BUCKET_PATH_PREFIX + bucket;
         }
     }
 

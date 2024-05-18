@@ -18,7 +18,9 @@
 
 package org.apache.paimon.spark
 
+import org.apache.paimon.catalog.Identifier
 import org.apache.paimon.hive.TestHiveMetastore
+import org.apache.paimon.table.FileStoreTable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkConf
@@ -49,6 +51,7 @@ class PaimonHiveTestBase extends PaimonSparkTestBase {
       .set("spark.sql.warehouse.dir", tempHiveDBDir.getCanonicalPath)
       .set("spark.sql.catalogImplementation", "hive")
       .set(s"spark.sql.catalog.$sparkCatalogName", "org.apache.paimon.spark.SparkGenericCatalog")
+      .set(s"spark.sql.catalog.spark_catalog.warehouse", tempHiveDBDir.getCanonicalPath)
       .set(s"spark.sql.catalog.$paimonHiveCatalogName", classOf[SparkCatalog].getName)
       .set(s"spark.sql.catalog.$paimonHiveCatalogName.metastore", "hive")
       .set(s"spark.sql.catalog.$paimonHiveCatalogName.warehouse", tempHiveDBDir.getCanonicalPath)
@@ -77,6 +80,10 @@ class PaimonHiveTestBase extends PaimonSparkTestBase {
   override protected def beforeEach(): Unit = {
     spark.sql(s"USE $sparkCatalogName")
     spark.sql(s"USE $hiveDbName")
+  }
+
+  override def loadTable(tableName: String): FileStoreTable = {
+    catalog.getTable(Identifier.create(hiveDbName, tableName)).asInstanceOf[FileStoreTable]
   }
 }
 

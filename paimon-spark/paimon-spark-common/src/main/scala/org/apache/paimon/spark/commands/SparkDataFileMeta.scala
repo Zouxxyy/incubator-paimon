@@ -19,6 +19,7 @@
 package org.apache.paimon.spark.commands
 
 import org.apache.paimon.data.BinaryRow
+import org.apache.paimon.fs.Path
 import org.apache.paimon.io.DataFileMeta
 import org.apache.paimon.table.source.DataSplit
 import org.apache.paimon.utils.FileStorePathFactory
@@ -32,10 +33,12 @@ case class SparkDataFileMeta(
     dataFileMeta: DataFileMeta) {
 
   def relativePath(fileStorePathFactory: FileStorePathFactory): String = {
-    fileStorePathFactory
-      .relativePartitionAndBucketPath(partition, bucket)
-      .toUri
-      .toString + "/" + dataFileMeta.fileName()
+    val str = fileStorePathFactory.relativePartitionAndBucketPathString(partition, bucket)
+    if (str.isEmpty) {
+      dataFileMeta.fileName()
+    } else {
+      new Path(str + "/" + dataFileMeta.fileName()).toString
+    }
   }
 }
 
