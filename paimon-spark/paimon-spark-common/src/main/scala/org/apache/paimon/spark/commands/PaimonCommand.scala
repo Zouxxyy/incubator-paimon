@@ -236,8 +236,9 @@ trait PaimonCommand extends WithFileStoreTable with ExpressionHelper {
 
           val pathFactory = store.pathFactory()
           val partitionAndBucket = pathFactory
-            .relativePartitionAndBucketPath(sparkDeletionFile.partition, sparkDeletionFile.bucket)
-            .toString
+            .relativePartitionAndBucketPathString(
+              sparkDeletionFile.partition,
+              sparkDeletionFile.bucket)
 
           SparkDeletionVectors(
             partitionAndBucket,

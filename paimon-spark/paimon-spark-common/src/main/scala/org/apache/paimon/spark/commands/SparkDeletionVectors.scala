@@ -32,9 +32,9 @@ case class SparkDeletionVectors(
 ) {
   def relativePaths(fileStorePathFactory: FileStorePathFactory): Seq[String] = {
     val prefix = fileStorePathFactory
-      .relativePartitionAndBucketPath(SerializationUtils.deserializeBinaryRow(partition), bucket)
-      .toUri
-      .toString + "/"
+      .relativePartitionAndBucketPathString(
+        SerializationUtils.deserializeBinaryRow(partition),
+        bucket) + "/"
     dataFileAndDeletionVector.map(prefix + _._1)
   }
 }

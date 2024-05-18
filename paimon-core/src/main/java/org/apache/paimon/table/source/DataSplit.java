@@ -356,7 +356,7 @@ public class DataSplit implements Split {
 
         public DataSplit build() {
             checkArgument(split.partition != null);
-            checkArgument(split.bucket != -1);
+            // checkArgument(split.bucket != -1);
             checkArgument(split.bucketPath != null);
             checkArgument(split.dataFiles != null);
 

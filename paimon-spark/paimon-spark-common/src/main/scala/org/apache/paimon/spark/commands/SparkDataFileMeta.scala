@@ -19,6 +19,7 @@
 package org.apache.paimon.spark.commands
 
 import org.apache.paimon.data.BinaryRow
+import org.apache.paimon.fs.Path
 import org.apache.paimon.io.DataFileMeta
 import org.apache.paimon.spark.PaimonImplicits
 import org.apache.paimon.table.source.{DataSplit, DeletionFile}
@@ -34,10 +35,12 @@ case class SparkDataFileMeta(
     deletionFile: Option[DeletionFile] = None) {
 
   def relativePath(fileStorePathFactory: FileStorePathFactory): String = {
-    fileStorePathFactory
-      .relativePartitionAndBucketPath(partition, bucket)
-      .toUri
-      .toString + "/" + dataFileMeta.fileName()
+    val str = fileStorePathFactory.relativePartitionAndBucketPathString(partition, bucket)
+    if (str.isEmpty) {
+      dataFileMeta.fileName()
+    } else {
+      new Path(str + "/" + dataFileMeta.fileName()).toString
+    }
   }
 
   def toSparkDeletionFile: SparkDeletionFile = {

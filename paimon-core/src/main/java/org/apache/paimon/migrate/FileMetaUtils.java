@@ -86,7 +86,7 @@ public class FileMetaUtils {
     public static CommitMessage commitFile(BinaryRow partition, List<DataFileMeta> dataFileMetas) {
         return new CommitMessageImpl(
                 partition,
-                0,
+                -1,
                 new DataIncrement(dataFileMetas, Collections.emptyList(), Collections.emptyList()),
                 new CompactIncrement(
                         Collections.emptyList(), Collections.emptyList(), Collections.emptyList()));
@@ -118,11 +118,10 @@ public class FileMetaUtils {
                                             new RuntimeException(
                                                     "Can't get table stats extractor for format "
                                                             + format));
-            Path newPath = renameFile(fileIO, fileStatus.getPath(), dir, format, rollback);
             return constructFileMeta(
-                    newPath.getName(),
+                    fileStatus.getPath().getName(),
                     fileStatus.getLen(),
-                    newPath,
+                    fileStatus.getPath(),
                     simpleStatsExtractor,
                     fileIO,
                     table);
