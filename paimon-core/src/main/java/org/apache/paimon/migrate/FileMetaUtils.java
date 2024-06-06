@@ -47,7 +47,9 @@ import org.apache.paimon.utils.TypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -64,16 +66,33 @@ public class FileMetaUtils {
             FileIO fileIO,
             String format,
             String location,
+            List<String> fileNames,
             Table paimonTable,
             Predicate<FileStatus> filter,
             Path dir,
             Map<Path, Path> rollback)
             throws IOException {
-        List<FileStatus> fileStatuses =
-                Arrays.stream(fileIO.listStatus(new Path(location)))
-                        .filter(s -> !s.isDir())
-                        .filter(filter)
-                        .collect(Collectors.toList());
+        List<FileStatus> fileStatuses;
+        if (fileNames != null) {
+            fileStatuses = new ArrayList<>(fileNames.size());
+            for (String fileName : fileNames) {
+                try {
+                    FileStatus status =
+                            fileIO.getFileStatus(new Path(location, "bucket-0/" + fileName));
+                    if (!status.isDir() && filter.test(status)) {
+                        fileStatuses.add(status);
+                    }
+                } catch (FileNotFoundException e) {
+                    LOG.warn("file not found: {}", fileName);
+                }
+            }
+        } else {
+            fileStatuses =
+                    Arrays.stream(fileIO.listStatus(new Path(location)))
+                            .filter(s -> !s.isDir())
+                            .filter(filter)
+                            .collect(Collectors.toList());
+        }
 
         return fileStatuses.stream()
                 .map(
@@ -118,11 +137,10 @@ public class FileMetaUtils {
                                             new RuntimeException(
                                                     "Can't get table stats extractor for format "
                                                             + format));
-            Path newPath = renameFile(fileIO, fileStatus.getPath(), dir, format, rollback);
             return constructFileMeta(
-                    newPath.getName(),
+                    fileStatus.getPath().getName(),
                     fileStatus.getLen(),
-                    newPath,
+                    fileStatus.getPath(),
                     simpleStatsExtractor,
                     fileIO,
                     table);

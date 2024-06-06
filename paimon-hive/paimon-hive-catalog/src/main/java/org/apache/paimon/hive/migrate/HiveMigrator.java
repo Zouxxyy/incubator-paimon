@@ -410,6 +410,7 @@ public class HiveMigrator implements Migrator {
                             fileIO,
                             format,
                             location,
+                            null,
                             paimonTable,
                             HIDDEN_PATH_FILTER,
                             newDir,
