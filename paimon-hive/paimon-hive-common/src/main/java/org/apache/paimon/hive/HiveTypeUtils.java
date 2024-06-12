@@ -287,7 +287,7 @@ public class HiveTypeUtils {
             } else if (TypeInfoFactory.dateTypeInfo.equals(atomic)) {
                 return DataTypes.DATE();
             } else if (TypeInfoFactory.timestampTypeInfo.equals(atomic)) {
-                return DataTypes.TIMESTAMP_MILLIS();
+                return new TimestampType(9);
             }
 
             throw new UnsupportedOperationException(

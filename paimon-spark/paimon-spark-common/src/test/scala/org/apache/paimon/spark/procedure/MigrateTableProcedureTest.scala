@@ -141,4 +141,80 @@ class MigrateTableProcedureTest extends PaimonHiveTestBase {
         .hasMessageContaining("Hive migrator only support unaware-bucket target table")
     }
   }
+
+  test(s"Paimon migrate table procedure: migrate table with xx") {
+    withTable("hive_tbl") {
+      spark.sql(s"""
+                   |CREATE TABLE hive_tbl (
+                   |    tiny_int_col TINYINT,
+                   |    small_int_col SMALLINT,
+                   |    int_col INT,
+                   |    big_int_col BIGINT,
+                   |    boolean_col BOOLEAN,
+                   |    float_col FLOAT,
+                   |    double_col DOUBLE,
+                   |    string_col STRING,
+                   |    char_col CHAR(10),
+                   |    varchar_col VARCHAR(20),
+                   |    binary_col BINARY,
+                   |    date_col DATE,
+                   |    timestamp_col TIMESTAMP,
+                   |    decimal_col DECIMAL(10, 2),
+                   |    array_col ARRAY<INT>,
+                   |    map_col MAP<STRING, INT>,
+                   |    struct_col STRUCT<name: STRING, age: INT>
+                   |)
+                   |USING parquet
+                   |""".stripMargin)
+
+      spark.sql(s"""INSERT INTO hive_tbl VALUES (
+                   |    127,
+                   |    32767,
+                   |    2147483647,
+                   |    9223372036854775807,
+                   |    TRUE,
+                   |    3.14,
+                   |    2.718281828459045,
+                   |    'Hello, Hive!',
+                   |    'CHAR_DATA',
+                   |    'VARCHAR_DATA',
+                   |    cast('binary data' as binary),
+                   |    cast('2020-01-01' as date),
+                   |    cast('2020-01-01 00:00:00' as timestamp),
+                   |    12345.67,
+                   |    array(1, 2, 3),
+                   |    map('key1', 1, 'key2', 2),
+                   |    named_struct('name', 'John', 'age', 30)
+                   |)""".stripMargin)
+
+      spark.sql(s"select * from hive_tbl").show
+
+      spark.sql(
+        s"CALL sys.migrate_table(source_type => 'hive', table => '$hiveDbName.hive_tbl', options => 'file.format=parquet')")
+
+      spark.sql(s"select * from hive_tbl").show
+    }
+  }
+
+  test(s"Paimon migrate table procedure: migrate table with xxx") {
+    withTable("hive_tbl") {
+      spark.sql(s"""
+                   |CREATE TABLE hive_tbl (
+                   |    timestamp_col TIMESTAMP
+                   |)
+                   |USING parquet
+                   |""".stripMargin)
+
+      spark.sql(s"""INSERT INTO hive_tbl VALUES (
+                   |    cast('2020-01-01 00:00:00' as timestamp)
+                   |)""".stripMargin)
+
+      spark.sql(s"select * from hive_tbl").show
+
+      spark.sql(
+        s"CALL sys.migrate_table(source_type => 'hive', table => '$hiveDbName.hive_tbl', options => 'file.format=parquet')")
+
+      spark.sql(s"select * from hive_tbl").show
+    }
+  }
 }
