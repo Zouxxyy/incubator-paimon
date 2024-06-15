@@ -31,6 +31,7 @@ import org.apache.paimon.io.CompactIncrement;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataFilePathFactory;
 import org.apache.paimon.io.DataIncrement;
+import org.apache.paimon.io.IndexIncrement;
 import org.apache.paimon.io.RowDataRollingFileWriter;
 import org.apache.paimon.manifest.FileSource;
 import org.apache.paimon.memory.MemoryOwner;
@@ -289,7 +290,7 @@ public class AppendOnlyWriter implements RecordWriter<InternalRow>, MemoryOwner 
         compactBefore.clear();
         compactAfter.clear();
 
-        return new CommitIncrement(dataIncrement, compactIncrement);
+        return new CommitIncrement(dataIncrement, compactIncrement, IndexIncrement.empty());
     }
 
     @Override

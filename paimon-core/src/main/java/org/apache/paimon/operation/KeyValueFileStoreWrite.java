@@ -210,7 +210,8 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                 options.commitForceCompact(),
                 options.changelogProducer(),
                 restoreIncrement,
-                UserDefinedSeqComparator.create(valueType, options));
+                UserDefinedSeqComparator.create(valueType, options),
+                dvMaintainer);
     }
 
     @VisibleForTesting

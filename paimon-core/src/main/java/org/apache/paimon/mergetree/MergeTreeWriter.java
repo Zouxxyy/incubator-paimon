@@ -24,10 +24,13 @@ import org.apache.paimon.annotation.VisibleForTesting;
 import org.apache.paimon.compact.CompactManager;
 import org.apache.paimon.compact.CompactResult;
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.deletionvectors.DeletionVectorsMaintainer;
 import org.apache.paimon.disk.IOManager;
+import org.apache.paimon.index.IndexFileMeta;
 import org.apache.paimon.io.CompactIncrement;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataIncrement;
+import org.apache.paimon.io.IndexIncrement;
 import org.apache.paimon.io.KeyValueFileWriterFactory;
 import org.apache.paimon.io.RollingFileWriter;
 import org.apache.paimon.manifest.FileSource;
@@ -52,6 +55,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.apache.paimon.deletionvectors.DeletionVectorsIndexFile.DELETION_VECTORS_INDEX;
+
 /** A {@link RecordWriter} to write records and generate {@link CompactIncrement}. */
 public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
 
@@ -70,6 +75,7 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
     private final boolean commitForceCompact;
     private final ChangelogProducer changelogProducer;
     @Nullable private final FieldsComparator userDefinedSeqComparator;
+    @Nullable private final DeletionVectorsMaintainer dvMaintainer;
 
     private final LinkedHashSet<DataFileMeta> newFiles;
     private final LinkedHashSet<DataFileMeta> deletedFiles;
@@ -95,7 +101,8 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
             boolean commitForceCompact,
             ChangelogProducer changelogProducer,
             @Nullable CommitIncrement increment,
-            @Nullable FieldsComparator userDefinedSeqComparator) {
+            @Nullable FieldsComparator userDefinedSeqComparator,
+            @Nullable DeletionVectorsMaintainer dvMaintainer) {
         this.writeBufferSpillable = writeBufferSpillable;
         this.maxDiskSize = maxDiskSize;
         this.sortMaxFan = sortMaxFan;
@@ -118,6 +125,7 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
         this.compactBefore = new LinkedHashMap<>();
         this.compactAfter = new LinkedHashSet<>();
         this.compactChangelog = new LinkedHashSet<>();
+        this.dvMaintainer = dvMaintainer;
         if (increment != null) {
             newFiles.addAll(increment.newFilesIncrement().newFiles());
             deletedFiles.addAll(increment.newFilesIncrement().deletedFiles());
@@ -128,6 +136,16 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
                     .forEach(f -> compactBefore.put(f.fileName(), f));
             compactAfter.addAll(increment.compactIncrement().compactAfter());
             compactChangelog.addAll(increment.compactIncrement().changelogFiles());
+            for (IndexFileMeta indexFileMeta : increment.indexIncrement().newIndexFiles()) {
+                assert dvMaintainer != null;
+                assert indexFileMeta.indexType().equals(DELETION_VECTORS_INDEX);
+                dvMaintainer.indexFileHandler().deleteIndexFile(indexFileMeta);
+            }
+            for (IndexFileMeta indexFileMeta : increment.indexIncrement().deletedIndexFiles()) {
+                assert dvMaintainer != null;
+                assert indexFileMeta.indexType().equals(DELETION_VECTORS_INDEX);
+                dvMaintainer.indexFileHandler().deleteIndexFile(indexFileMeta);
+            }
         }
     }
 
@@ -283,6 +301,10 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
                         new ArrayList<>(compactBefore.values()),
                         new ArrayList<>(compactAfter),
                         new ArrayList<>(compactChangelog));
+        IndexIncrement indexIncrement =
+                dvMaintainer == null
+                        ? IndexIncrement.empty()
+                        : new IndexIncrement(dvMaintainer.writeDeletionVectorsIndex());
 
         newFiles.clear();
         deletedFiles.clear();
@@ -291,7 +313,7 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
         compactAfter.clear();
         compactChangelog.clear();
 
-        return new CommitIncrement(dataIncrement, compactIncrement);
+        return new CommitIncrement(dataIncrement, compactIncrement, indexIncrement);
     }
 
     private void updateCompactResult(CompactResult result) {
@@ -356,5 +378,7 @@ public class MergeTreeWriter implements RecordWriter<KeyValue>, MemoryOwner {
         for (DataFileMeta file : delete) {
             writerFactory.deleteFile(file.fileName(), file.level());
         }
+
+        // 删除无用的 dv 文件
     }
 }

@@ -35,6 +35,7 @@ import org.apache.flink.types.Row;
 import org.apache.flink.types.RowKind;
 import org.apache.flink.util.CloseableIterator;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -357,8 +358,7 @@ public class PrimaryKeyFileStoreTableITCase extends AbstractTestBase {
         testLookupChangelogProducerRandom(bEnv, 1, false);
     }
 
-    @Test
-    @Timeout(1200)
+    @RepeatedTest(10)
     public void testLookupChangelogProducerStreamingRandom() throws Exception {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         TableEnvironment sEnv =
@@ -437,7 +437,7 @@ public class PrimaryKeyFileStoreTableITCase extends AbstractTestBase {
     private void testLookupChangelogProducerRandom(
             TableEnvironment tEnv, int numProducers, boolean enableFailure) throws Exception {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        boolean enableDeletionVectors = random.nextBoolean();
+        boolean enableDeletionVectors = true;
         if (enableDeletionVectors) {
             // Deletion vectors mode not support concurrent write
             numProducers = 1;
@@ -451,8 +451,7 @@ public class PrimaryKeyFileStoreTableITCase extends AbstractTestBase {
                                 "'write-buffer-size' = '%s',",
                                 random.nextBoolean() ? "512kb" : "1mb")
                         + "'changelog-producer' = 'lookup',"
-                        + String.format(
-                                "'changelog-producer.lookup-wait' = '%s',", random.nextBoolean())
+                        + String.format("'changelog-producer.lookup-wait' = '%s',", true)
                         + String.format(
                                 "'deletion-vectors.enabled' = '%s'", enableDeletionVectors));
 

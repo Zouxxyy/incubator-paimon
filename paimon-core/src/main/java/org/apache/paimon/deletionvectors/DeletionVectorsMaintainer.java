@@ -49,6 +49,10 @@ public class DeletionVectorsMaintainer {
         this.modified = false;
     }
 
+    public IndexFileHandler indexFileHandler() {
+        return indexFileHandler;
+    }
+
     /**
      * Notifies a new deletion which marks the specified row position as deleted with the given file
      * name.
@@ -89,13 +93,12 @@ public class DeletionVectorsMaintainer {
     }
 
     /**
-     * Prepares to commit: write new deletion vectors index file if any modifications have been
-     * made.
+     * Write new deletion vectors index file if any modifications have been made.
      *
      * @return A list containing the metadata of the deletion vectors index file, or an empty list
      *     if no changes need to be committed.
      */
-    public List<IndexFileMeta> prepareCommit() {
+    public List<IndexFileMeta> writeDeletionVectorsIndex() {
         if (modified) {
             modified = false;
             return indexFileHandler.writeDeletionVectorsIndex(deletionVectors);

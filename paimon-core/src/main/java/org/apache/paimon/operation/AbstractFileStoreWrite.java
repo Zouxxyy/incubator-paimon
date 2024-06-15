@@ -200,9 +200,8 @@ public abstract class AbstractFileStoreWrite<T> implements FileStoreWrite<T> {
                 if (writerContainer.indexMaintainer != null) {
                     newIndexFiles.addAll(writerContainer.indexMaintainer.prepareCommit());
                 }
-                if (writerContainer.deletionVectorsMaintainer != null) {
-                    newIndexFiles.addAll(writerContainer.deletionVectorsMaintainer.prepareCommit());
-                }
+                assert increment.indexIncrement().newIndexFiles().isEmpty();
+                newIndexFiles.addAll(increment.indexIncrement().deletedIndexFiles());
                 CommitMessageImpl committable =
                         new CommitMessageImpl(
                                 partition,

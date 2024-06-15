@@ -55,6 +55,10 @@ public class IndexIncrement {
         return newIndexFiles.isEmpty() && deletedIndexFiles.isEmpty();
     }
 
+    public static IndexIncrement empty() {
+        return new IndexIncrement(Collections.emptyList(), Collections.emptyList());
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

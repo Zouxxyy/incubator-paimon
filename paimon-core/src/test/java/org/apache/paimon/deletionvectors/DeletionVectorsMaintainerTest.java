@@ -61,7 +61,7 @@ public class DeletionVectorsMaintainerTest extends PrimaryKeyTableTestBase {
 
         assertThat(dvMaintainer.deletionVectorOf("f1")).isPresent();
         assertThat(dvMaintainer.deletionVectorOf("f3")).isEmpty();
-        List<IndexFileMeta> fileMetas = dvMaintainer.prepareCommit();
+        List<IndexFileMeta> fileMetas = dvMaintainer.writeDeletionVectorsIndex();
 
         Map<String, DeletionVector> deletionVectors = fileHandler.readAllDeletionVectors(fileMetas);
         assertThat(deletionVectors.get("f1").isDeleted(1)).isTrue();
@@ -83,7 +83,7 @@ public class DeletionVectorsMaintainerTest extends PrimaryKeyTableTestBase {
         deletionVector1.delete(5);
         dvMaintainer.notifyNewDeletion("f1", deletionVector1);
 
-        List<IndexFileMeta> fileMetas1 = dvMaintainer.prepareCommit();
+        List<IndexFileMeta> fileMetas1 = dvMaintainer.writeDeletionVectorsIndex();
         assertThat(fileMetas1.size()).isEqualTo(1);
         CommitMessage commitMessage =
                 new CommitMessageImpl(
@@ -104,7 +104,7 @@ public class DeletionVectorsMaintainerTest extends PrimaryKeyTableTestBase {
         deletionVector2.delete(2);
         dvMaintainer.notifyNewDeletion("f1", deletionVector2);
 
-        List<IndexFileMeta> fileMetas2 = dvMaintainer.prepareCommit();
+        List<IndexFileMeta> fileMetas2 = dvMaintainer.writeDeletionVectorsIndex();
         assertThat(fileMetas2.size()).isEqualTo(1);
         commitMessage =
                 new CommitMessageImpl(
