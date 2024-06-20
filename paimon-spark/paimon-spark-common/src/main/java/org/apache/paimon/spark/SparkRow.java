@@ -42,6 +42,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -170,7 +171,9 @@ public class SparkRow implements InternalRow, Serializable {
 
     private static Timestamp toPaimonTimestamp(Object object) {
         if (object instanceof java.sql.Timestamp) {
-            return Timestamp.fromSQLTimestamp((java.sql.Timestamp) object);
+            LocalDateTime localDateTime =
+                    DateTimeUtils.toLocalDateTime((java.sql.Timestamp) object, ZoneOffset.UTC);
+            return Timestamp.fromLocalDateTime(localDateTime);
         } else if (object instanceof java.time.Instant) {
             LocalDateTime localDateTime =
                     LocalDateTime.ofInstant((Instant) object, ZoneId.systemDefault());

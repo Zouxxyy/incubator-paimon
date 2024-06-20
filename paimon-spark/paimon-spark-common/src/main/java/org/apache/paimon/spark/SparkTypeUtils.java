@@ -150,7 +150,7 @@ public class SparkTypeUtils {
 
         @Override
         public DataType visit(TimestampType timestampType) {
-            return DataTypes.TimestampType;
+            return DataTypes.TimestampNTZType;
         }
 
         @Override
@@ -308,6 +308,8 @@ public class SparkTypeUtils {
             } else if (atomic instanceof org.apache.spark.sql.types.DateType) {
                 return new DateType();
             } else if (atomic instanceof org.apache.spark.sql.types.TimestampType) {
+                return new LocalZonedTimestampType();
+            } else if (atomic instanceof org.apache.spark.sql.types.TimestampNTZType) {
                 return new TimestampType();
             } else if (atomic instanceof org.apache.spark.sql.types.DecimalType) {
                 return new DecimalType(
