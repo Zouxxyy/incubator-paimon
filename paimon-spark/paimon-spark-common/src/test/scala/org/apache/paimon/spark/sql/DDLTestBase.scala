@@ -189,6 +189,7 @@ abstract class DDLTestBase extends PaimonSparkTestBase {
     Seq("parquet", "orc", "avro").foreach {
       format =>
         withTimeZone("Asia/Shanghai") {
+          println("format is" + format)
           withTable("paimon_tbl") {
             // Spark support timestamp_ntz since 3.4
             if (gteqSpark3_4) {
