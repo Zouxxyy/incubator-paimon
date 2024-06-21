@@ -556,6 +556,10 @@ public class DateTimeUtils {
         return Instant.ofEpochMilli(timeMills).atZone(zoneId).toLocalDateTime();
     }
 
+    public static LocalDateTime toLocalDateTime(java.sql.Timestamp ts, ZoneId zoneId) {
+        return ts.toInstant().atZone(zoneId).toLocalDateTime();
+    }
+
     public static LocalDateTime toLocalDateTime(String dateStr, int precision) {
         return fromTemporalAccessor(DEFAULT_TIMESTAMP_FORMATTER.parse(dateStr), precision);
     }
