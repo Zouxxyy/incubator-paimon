@@ -24,6 +24,7 @@ import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.spark.util.SparkRowUtils;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DateType;
@@ -60,10 +61,14 @@ public class SparkRow implements InternalRow, Serializable {
         this(type, row, RowKind.INSERT);
     }
 
-    public SparkRow(RowType type, Row row, RowKind rowkind) {
+    private SparkRow(RowType type, Row row, RowKind rowkind) {
         this.type = type;
         this.row = row;
         this.rowKind = rowkind;
+    }
+
+    public static SparkRow fromRow(RowType type, Row row, int rowKindColIdx) {
+        return new SparkRow(type, row, SparkRowUtils.getRowKind(row, rowKindColIdx));
     }
 
     @Override

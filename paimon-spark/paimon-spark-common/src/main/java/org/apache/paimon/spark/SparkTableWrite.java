@@ -19,7 +19,6 @@
 package org.apache.paimon.spark;
 
 import org.apache.paimon.disk.IOManager;
-import org.apache.paimon.spark.util.SparkRowUtils;
 import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.table.sink.BatchWriteBuilder;
 import org.apache.paimon.table.sink.CommitMessage;
@@ -53,8 +52,8 @@ public class SparkTableWrite implements AutoCloseable {
         write.write(toPaimonRow(row));
     }
 
-    public void write(Row row, int bucket) throws Exception {
-        write.write(toPaimonRow(row), bucket);
+    public void write(SparkRow sparkRow, int bucket) throws Exception {
+        write.write(sparkRow, bucket);
     }
 
     public Iterator<byte[]> finish() throws Exception {
@@ -73,6 +72,6 @@ public class SparkTableWrite implements AutoCloseable {
     }
 
     private SparkRow toPaimonRow(Row row) {
-        return new SparkRow(rowType, row, SparkRowUtils.getRowKind(row, rowKindColIdx));
+        return SparkRow.fromRow(rowType, row, rowKindColIdx);
     }
 }
