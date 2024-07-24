@@ -53,6 +53,12 @@ public class SegmentsCache<T> {
         return cache.get(key, viewFunction);
     }
 
+    public void removeIfContain(T key) {
+        if (cache.asMap().containsKey(key)) {
+            cache.invalidate(key);
+        }
+    }
+
     private int weigh(T cacheKey, Segments segments) {
         return OBJECT_MEMORY_SIZE + segments.segments().size() * pageSize;
     }

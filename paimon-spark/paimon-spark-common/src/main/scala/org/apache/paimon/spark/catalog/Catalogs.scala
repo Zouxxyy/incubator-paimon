@@ -18,6 +18,14 @@
 
 package org.apache.paimon.spark.catalog
 
+import org.apache.paimon.catalog.Catalog
+import org.apache.paimon.io.cache.CacheKey
+import org.apache.paimon.shade.caffeine2.com.github.benmanes.caffeine.cache.{Cache, Caffeine}
+import org.apache.paimon.shade.guava30.com.google.common.util.concurrent.MoreExecutors
+import org.apache.paimon.spark.{SparkCatalog, SparkTable}
+
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -48,4 +56,23 @@ object Catalogs {
     }
     new CaseInsensitiveStringMap(options)
   }
+
+  val cache: Cache[CacheKey, SparkTable] = Caffeine
+    .newBuilder()
+    .executor(MoreExecutors.directExecutor())
+    .build();
+
+  @throws[NoSuchTableException]
+  @throws[Catalog.TableNotExistException]
+  def get(ident: Identifier, catalog: SparkCatalog): SparkTable = {
+    val key = TableKey(ident)
+    var sparkTable = cache.getIfPresent(key)
+    if (sparkTable == null) {
+      sparkTable = catalog.loadTable0(ident)
+      cache.put(key, sparkTable)
+    }
+    sparkTable
+  }
+
+  case class TableKey(ident: Identifier) extends CacheKey
 }

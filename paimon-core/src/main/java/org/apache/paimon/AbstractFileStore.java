@@ -71,8 +71,9 @@ abstract class AbstractFileStore<T> implements FileStore<T> {
     protected final CoreOptions options;
     protected final RowType partitionType;
     private final CatalogEnvironment catalogEnvironment;
-
-    @Nullable private final SegmentsCache<String> writeManifestCache;
+    private static final SegmentsCache<String> writeManifestCache =
+            new SegmentsCache<>(
+                    (int) MemorySize.parse("128 kb").getBytes(), MemorySize.ofMebiBytes(2048));
 
     protected AbstractFileStore(
             FileIO fileIO,
@@ -88,10 +89,6 @@ abstract class AbstractFileStore<T> implements FileStore<T> {
         this.partitionType = partitionType;
         this.catalogEnvironment = catalogEnvironment;
         MemorySize writeManifestCache = options.writeManifestCache();
-        this.writeManifestCache =
-                writeManifestCache.getBytes() == 0
-                        ? null
-                        : new SegmentsCache<>(options.pageSize(), writeManifestCache);
     }
 
     @Override
@@ -122,7 +119,7 @@ abstract class AbstractFileStore<T> implements FileStore<T> {
                 options.manifestCompression(),
                 pathFactory(),
                 options.manifestTargetSize().getBytes(),
-                forWrite ? writeManifestCache : null);
+                writeManifestCache);
     }
 
     @Override
@@ -136,7 +133,7 @@ abstract class AbstractFileStore<T> implements FileStore<T> {
                 options.manifestFormat(),
                 options.manifestCompression(),
                 pathFactory(),
-                forWrite ? writeManifestCache : null);
+                writeManifestCache);
     }
 
     protected IndexManifestFile.Factory indexManifestFileFactory() {

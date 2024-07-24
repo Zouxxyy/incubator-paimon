@@ -36,6 +36,9 @@ class DescribeTableTest extends PaimonSparkTestBase {
                  |  dt STRING)
                  |COMMENT '$comment'
                  |""".stripMargin)
+    sql(s"INSERT INTO T VALUES (1, 'a', '2023-01-01'), (2, 'b', '2023-01-02')")
+    sql(s"SELECT * FROM T where id = 2").show()
+    sql(s"SELECT * FROM T where id = 1").show()
     checkTableCommentEqual("T", comment)
 
     comment = "new comment"

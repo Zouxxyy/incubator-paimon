@@ -77,6 +77,10 @@ public class ObjectsCache<K, V> {
         }
     }
 
+    public void removeIfContain(K key) {
+        cache.removeIfContain(key);
+    }
+
     private Segments readSegments(K key, @Nullable Long fileSize, Filter<InternalRow> loadFilter) {
         try (CloseableIterator<InternalRow> iterator = reader.apply(key, fileSize)) {
             ArrayList<MemorySegment> segments = new ArrayList<>();

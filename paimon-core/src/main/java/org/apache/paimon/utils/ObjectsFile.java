@@ -124,9 +124,12 @@ public class ObjectsFile<T> {
             Filter<InternalRow> readFilter)
             throws IOException {
         if (cache != null) {
-            return cache.read(fileName, fileSize, loadFilter, readFilter);
+            try {
+                return cache.read(fileName, fileSize, loadFilter, readFilter);
+            } catch (Throwable e) {
+                cache.removeIfContain(fileName);
+            }
         }
-
         RecordReader<InternalRow> reader =
                 createFormatReader(fileIO, readerFactory, pathFactory.toPath(fileName), fileSize);
         if (readFilter != Filter.ALWAYS_TRUE) {
@@ -155,6 +158,10 @@ public class ObjectsFile<T> {
                     writer.finish();
                 }
             }
+            String fileName = path.getName();
+            if (cache != null) {
+                cache.removeIfContain(fileName);
+            }
             return path.getName();
         } catch (Throwable e) {
             fileIO.deleteQuietly(path);
@@ -175,5 +182,8 @@ public class ObjectsFile<T> {
 
     public void delete(String fileName) {
         fileIO.deleteQuietly(pathFactory.toPath(fileName));
+        if (cache != null) {
+            cache.removeIfContain(fileName);
+        }
     }
 }

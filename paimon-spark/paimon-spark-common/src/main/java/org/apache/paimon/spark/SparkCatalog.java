@@ -25,6 +25,7 @@ import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.schema.Schema;
 import org.apache.paimon.schema.SchemaChange;
+import org.apache.paimon.spark.catalog.Catalogs;
 import org.apache.paimon.spark.catalog.SparkBaseCatalog;
 import org.apache.paimon.table.Table;
 
@@ -208,10 +209,15 @@ public class SparkCatalog extends SparkBaseCatalog {
         }
     }
 
+    public SparkTable loadTable0(Identifier ident)
+            throws Catalog.TableNotExistException, NoSuchTableException {
+        return new SparkTable(load(ident));
+    }
+
     @Override
     public SparkTable loadTable(Identifier ident) throws NoSuchTableException {
         try {
-            return new SparkTable(load(ident));
+            return Catalogs.get(ident, this);
         } catch (Catalog.TableNotExistException e) {
             throw new NoSuchTableException(ident);
         }
