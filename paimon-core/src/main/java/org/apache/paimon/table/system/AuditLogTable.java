@@ -69,7 +69,6 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -532,22 +531,20 @@ public class AuditLogTable implements DataTable, ReadonlyTable {
         }
 
         @Override
-        public InnerTableRead withProjection(int[][] projection) {
+        public InnerTableRead withRequiredRowType(RowType requiredRowType) {
             // data projection to push down to dataRead
-            List<int[]> dataProjection = new ArrayList<>();
+            int[] projection = requiredRowType.toProjection();
+            List<Integer> dataProjection = new ArrayList<>();
             // read projection to handle record returned by dataRead
             List<Integer> readProjection = new ArrayList<>();
             boolean rowKindAppeared = false;
             for (int i = 0; i < projection.length; i++) {
-                int[] field = projection[i];
-                int topField = field[0];
-                if (topField == 0) {
+                int index = projection[i];
+                if (index == 0) {
                     rowKindAppeared = true;
                     readProjection.add(-1);
                 } else {
-                    int[] newField = Arrays.copyOf(field, field.length);
-                    newField[0] = newField[0] - 1;
-                    dataProjection.add(newField);
+                    dataProjection.add(index - 1);
 
                     // There is no row kind field. Keep it as it is
                     // Row kind field has occurred, and the following fields are offset by 1
@@ -556,7 +553,8 @@ public class AuditLogTable implements DataTable, ReadonlyTable {
                 }
             }
             this.readProjection = Ints.toArray(readProjection);
-            dataRead.withProjection(dataProjection.toArray(new int[0][]));
+            dataRead.withRequiredRowType(
+                    requiredRowType.withNewProjection(Ints.toArray(dataProjection)));
             return this;
         }
 

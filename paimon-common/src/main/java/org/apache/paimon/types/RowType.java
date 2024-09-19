@@ -56,6 +56,7 @@ public final class RowType extends DataType {
 
     private final List<DataField> fields;
     private InternalRow.FieldGetter[] fieldGetters;
+    private RowType originalRowType;
 
     public RowType(boolean isNullable, List<DataField> fields) {
         super(isNullable, DataTypeRoot.ROW);
@@ -73,6 +74,10 @@ public final class RowType extends DataType {
 
     public List<DataField> getFields() {
         return fields;
+    }
+
+    public static RowType empty() {
+        return new RowType(Collections.emptyList());
     }
 
     public List<String> getFieldNames() {
@@ -130,6 +135,15 @@ public final class RowType extends DataType {
         }
 
         throw new RuntimeException("Cannot find field: " + fieldName);
+    }
+
+    public int getFieldIndexByFieldId(int fieldId) {
+        for (int i = 0; i < fields.size(); i++) {
+            if (fields.get(i).id() == fieldId) {
+                return i;
+            }
+        }
+        throw new RuntimeException("Cannot find field index by FieldId " + fieldId);
     }
 
     @Override
@@ -223,6 +237,10 @@ public final class RowType extends DataType {
         return new RowType(newFields);
     }
 
+    public RowType project(int[][] mapping) {
+        return project(Arrays.stream(mapping).mapToInt(arr -> arr[0]).toArray());
+    }
+
     public RowType project(int[] mapping) {
         List<DataField> fields = getFields();
         return new RowType(
@@ -236,6 +254,31 @@ public final class RowType extends DataType {
                 names.stream()
                         .map(k -> fields.get(fieldNames.indexOf(k)))
                         .collect(Collectors.toList()));
+    }
+
+    // 如果 toProjection 和 withNewProjection 没有被调用，那么移除该方法
+    public RowType withOriginalRowType(RowType originalRowType) {
+        if (this.originalRowType != null) {
+            throw new RuntimeException();
+        }
+        this.originalRowType = originalRowType;
+        return this;
+    }
+
+    public int[] toProjection() {
+        if (originalRowType == null) {
+            throw new RuntimeException();
+        }
+        return fields.stream()
+                .mapToInt(field -> originalRowType.getFieldIndexByFieldId(field.id()))
+                .toArray();
+    }
+
+    public RowType withNewProjection(int[] projection) {
+        if (originalRowType == null) {
+            throw new RuntimeException();
+        }
+        return originalRowType.project(projection).withOriginalRowType(originalRowType);
     }
 
     public static RowType of(DataType... types) {

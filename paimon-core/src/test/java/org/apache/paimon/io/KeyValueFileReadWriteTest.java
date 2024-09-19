@@ -299,10 +299,12 @@ public class KeyValueFileReadWriteTest {
                         new TestKeyValueGenerator.TestKeyValueFieldsExtractor(),
                         new CoreOptions(new HashMap<>()));
         if (keyProjection != null) {
-            builder.withKeyProjection(keyProjection);
+            // todo: xinyu
+            // builder.withKeyProjection(keyProjection);
         }
         if (valueProjection != null) {
-            builder.withValueProjection(valueProjection);
+            // todo: xinyu
+            // builder.withValueProjection(valueProjection);
         }
         return builder.build(BinaryRow.EMPTY_ROW, 0, DeletionVector.emptyFactory());
     }

@@ -41,11 +41,9 @@ import org.apache.paimon.table.source.TableRead;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.SerializationUtils;
 
 import org.apache.paimon.shade.guava30.com.google.common.collect.ArrayListMultimap;
-import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
 import org.apache.paimon.shade.guava30.com.google.common.collect.Multimap;
 
 import java.util.ArrayList;
@@ -169,7 +167,6 @@ public class AggregationFieldsTable implements ReadonlyTable {
     private class SchemasRead implements InnerTableRead {
 
         private final FileIO fileIO;
-        private int[][] projection;
 
         public SchemasRead(FileIO fileIO) {
             this.fileIO = fileIO;
@@ -177,12 +174,6 @@ public class AggregationFieldsTable implements ReadonlyTable {
 
         @Override
         public InnerTableRead withFilter(Predicate predicate) {
-            return this;
-        }
-
-        @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
             return this;
         }
 
@@ -199,11 +190,6 @@ public class AggregationFieldsTable implements ReadonlyTable {
             Path location = ((AggregationSplit) split).location;
             TableSchema schemas = new SchemaManager(fileIO, location, branch).latest().get();
             Iterator<InternalRow> rows = createInternalRowIterator(schemas);
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(rows);
         }
 

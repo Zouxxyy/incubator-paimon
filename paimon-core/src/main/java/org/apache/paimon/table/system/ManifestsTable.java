@@ -42,7 +42,6 @@ import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.FileStorePathFactory;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.SerializationUtils;
 import org.apache.paimon.utils.SnapshotManager;
 import org.apache.paimon.utils.SnapshotNotExistException;
@@ -139,8 +138,6 @@ public class ManifestsTable implements ReadonlyTable {
 
     private static class ManifestsRead implements InnerTableRead {
 
-        private int[][] projection;
-
         private final FileStoreTable dataTable;
 
         public ManifestsRead(FileStoreTable dataTable) {
@@ -150,12 +147,6 @@ public class ManifestsTable implements ReadonlyTable {
         @Override
         public InnerTableRead withFilter(Predicate predicate) {
             // TODO
-            return this;
-        }
-
-        @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
             return this;
         }
 
@@ -173,11 +164,6 @@ public class ManifestsTable implements ReadonlyTable {
 
             Iterator<InternalRow> rows =
                     Iterators.transform(manifestFileMetas.iterator(), this::toRow);
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(rows);
         }
 

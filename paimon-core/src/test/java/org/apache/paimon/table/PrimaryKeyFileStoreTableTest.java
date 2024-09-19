@@ -1786,11 +1786,6 @@ public class PrimaryKeyFileStoreTableTest extends FileStoreTableTestBase {
     }
 
     @Override
-    protected FileStoreTable createFileStoreTable(Consumer<Options> configure) throws Exception {
-        return createFileStoreTable(configure, ROW_TYPE);
-    }
-
-    @Override
     protected FileStoreTable overwriteTestFileStoreTable() throws Exception {
         Options conf = new Options();
         conf.set(CoreOptions.PATH, tablePath.toString());
@@ -1807,7 +1802,8 @@ public class PrimaryKeyFileStoreTableTest extends FileStoreTableTestBase {
         return new PrimaryKeyFileStoreTable(FileIOFinder.find(tablePath), tablePath, tableSchema);
     }
 
-    private FileStoreTable createFileStoreTable(Consumer<Options> configure, RowType rowType)
+    @Override
+    protected FileStoreTable createFileStoreTable(Consumer<Options> configure, RowType rowType)
             throws Exception {
         Options options = new Options();
         options.set(CoreOptions.PATH, tablePath.toString());

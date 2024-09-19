@@ -307,7 +307,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                 lookupReaderFactory =
                         readerFactoryBuilder
                                 .copyWithoutProjection()
-                                .withValueProjection(new int[0][])
+                                .withRequiredValueType(RowType.empty())
                                 .build(partition, bucket, dvFactory);
                 processor = new ContainsValueProcessor();
                 wrapperFactory = new FirstRowMergeFunctionWrapperFactory();

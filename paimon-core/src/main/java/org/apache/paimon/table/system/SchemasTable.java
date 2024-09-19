@@ -54,7 +54,6 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.utils.IteratorRecordReader;
 import org.apache.paimon.utils.JsonSerdeUtil;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.SerializationUtils;
 
 import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
@@ -199,7 +198,6 @@ public class SchemasTable implements ReadonlyTable {
     private class SchemasRead implements InnerTableRead {
 
         private final FileIO fileIO;
-        private int[][] projection;
 
         private Optional<Long> optionalFilterSchemaIdMax = Optional.empty();
         private Optional<Long> optionalFilterSchemaIdMin = Optional.empty();
@@ -260,12 +258,6 @@ public class SchemasTable implements ReadonlyTable {
         }
 
         @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
-            return this;
-        }
-
-        @Override
         public TableRead withIOManager(IOManager ioManager) {
             return this;
         }
@@ -282,11 +274,6 @@ public class SchemasTable implements ReadonlyTable {
             Collection<TableSchema> tableSchemas =
                     manager.listWithRange(optionalFilterSchemaIdMax, optionalFilterSchemaIdMin);
             Iterator<InternalRow> rows = Iterators.transform(tableSchemas.iterator(), this::toRow);
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(rows);
         }
 

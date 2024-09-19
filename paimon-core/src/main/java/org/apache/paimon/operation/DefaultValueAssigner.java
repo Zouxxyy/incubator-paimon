@@ -34,7 +34,6 @@ import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.VarCharType;
-import org.apache.paimon.utils.Projection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,20 +51,20 @@ public class DefaultValueAssigner {
 
     private boolean needToAssign;
 
-    private int[][] project;
+    private RowType requiredRowType;
     private DefaultValueRow defaultValueRow;
 
     private DefaultValueAssigner(Map<String, String> defaultValues, RowType rowType) {
         this.defaultValues = defaultValues;
-        this.needToAssign = defaultValues.size() > 0;
+        this.needToAssign = !defaultValues.isEmpty();
         this.rowType = rowType;
     }
 
-    public DefaultValueAssigner handleProject(int[][] project) {
-        this.project = project;
-        if (project != null) {
-            List<String> projected = Projection.of(project).project(rowType).getFieldNames();
-            needToAssign = defaultValues.keySet().stream().anyMatch(projected::contains);
+    public DefaultValueAssigner handleRequiredRowType(RowType requiredRowType) {
+        this.requiredRowType = requiredRowType;
+        if (requiredRowType != null) {
+            List<String> requiredFieldNames = requiredRowType.getFieldNames();
+            needToAssign = defaultValues.keySet().stream().anyMatch(requiredFieldNames::contains);
         }
         return this;
     }
@@ -90,8 +89,8 @@ public class DefaultValueAssigner {
     @VisibleForTesting
     DefaultValueRow createDefaultValueRow() {
         List<DataField> fields;
-        if (project != null) {
-            fields = Projection.of(project).project(rowType).getFields();
+        if (requiredRowType != null) {
+            fields = requiredRowType.getFields();
         } else {
             fields = rowType.getFields();
         }

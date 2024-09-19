@@ -25,7 +25,7 @@ import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateProjectionConverter;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.schema.TableSchema;
-import org.apache.paimon.utils.Projection;
+import org.apache.paimon.types.RowType;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -35,7 +35,7 @@ public abstract class AbstractDataTableRead<T> implements InnerTableRead {
 
     private final DefaultValueAssigner defaultValueAssigner;
 
-    private int[][] projection;
+    private RowType requiredRowType;
     private boolean executeFilter = false;
     private Predicate predicate;
 
@@ -43,7 +43,7 @@ public abstract class AbstractDataTableRead<T> implements InnerTableRead {
         this.defaultValueAssigner = schema == null ? null : DefaultValueAssigner.create(schema);
     }
 
-    public abstract void projection(int[][] projection);
+    public abstract void requiredRowType(RowType requiredRowType);
 
     public abstract RecordReader<InternalRow> reader(Split split) throws IOException;
 
@@ -71,9 +71,15 @@ public abstract class AbstractDataTableRead<T> implements InnerTableRead {
 
     @Override
     public final InnerTableRead withProjection(int[][] projection) {
-        this.projection = projection;
-        this.defaultValueAssigner.handleProject(projection);
-        projection(projection);
+        // todo: xinyu projection to RowType requiredRowType
+        return withRequiredRowType(null);
+    }
+
+    @Override
+    public final InnerTableRead withRequiredRowType(RowType requiredRowType) {
+        this.requiredRowType = requiredRowType;
+        this.defaultValueAssigner.handleRequiredRowType(requiredRowType);
+        requiredRowType(requiredRowType);
         return this;
     }
 
@@ -96,11 +102,10 @@ public abstract class AbstractDataTableRead<T> implements InnerTableRead {
         }
 
         Predicate predicate = this.predicate;
-        if (projection != null) {
+        if (requiredRowType != null) {
             Optional<Predicate> optional =
                     predicate.visit(
-                            new PredicateProjectionConverter(
-                                    Projection.of(projection).toTopLevelIndexes()));
+                            new PredicateProjectionConverter(requiredRowType.toProjection()));
             if (!optional.isPresent()) {
                 return reader;
             }

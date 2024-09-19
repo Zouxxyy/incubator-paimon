@@ -78,7 +78,7 @@ public class MergeFileSplitRead implements SplitRead<KeyValue> {
     private final MergeSorter mergeSorter;
     private final List<String> sequenceFields;
 
-    @Nullable private int[][] keyProjectedFields;
+    @Nullable private RowType requiredKeyType;
 
     @Nullable private List<Predicate> filtersForKeys;
 
@@ -108,12 +108,6 @@ public class MergeFileSplitRead implements SplitRead<KeyValue> {
         this.sequenceFields = options.sequenceField();
     }
 
-    public MergeFileSplitRead withKeyProjection(@Nullable int[][] projectedFields) {
-        readerFactoryBuilder.withKeyProjection(projectedFields);
-        this.keyProjectedFields = projectedFields;
-        return this;
-    }
-
     public Comparator<InternalRow> keyComparator() {
         return keyComparator;
     }
@@ -122,12 +116,22 @@ public class MergeFileSplitRead implements SplitRead<KeyValue> {
         return mergeSorter;
     }
 
+    public MergeFileSplitRead withRequiredKeyType(@Nullable RowType requiredKeyType) {
+        readerFactoryBuilder.withRequiredKeyType(requiredKeyType);
+        this.requiredKeyType = requiredKeyType;
+        return this;
+    }
+
     @Override
-    public MergeFileSplitRead withProjection(@Nullable int[][] projectedFields) {
-        if (projectedFields == null) {
+    public MergeFileSplitRead withRequiredRowType(@Nullable RowType requiredRowType) {
+        if (requiredRowType == null) {
             return this;
         }
-
+        // todo: replace projectedFields with requiredRowType
+        int[][] projectedFields =
+                Arrays.stream(requiredRowType.toProjection())
+                        .mapToObj(i -> new int[] {i})
+                        .toArray(int[][]::new);
         int[][] newProjectedFields = projectedFields;
         if (sequenceFields.size() > 0) {
             // make sure projection contains sequence fields
@@ -151,8 +155,11 @@ public class MergeFileSplitRead implements SplitRead<KeyValue> {
         this.pushdownProjection = projection.pushdownProjection;
         this.outerProjection = projection.outerProjection;
         if (pushdownProjection != null) {
-            readerFactoryBuilder.withValueProjection(pushdownProjection);
-            mergeSorter.setProjectedValueType(readerFactoryBuilder.projectedValueType());
+            RowType pushdownRowType =
+                    requiredRowType.withNewProjection(
+                            Arrays.stream(pushdownProjection).mapToInt(arr -> arr[0]).toArray());
+            readerFactoryBuilder.withRequiredValueType(pushdownRowType);
+            mergeSorter.setProjectedValueType(pushdownRowType);
         }
 
         if (newProjectedFields != projectedFields) {
@@ -304,11 +311,11 @@ public class MergeFileSplitRead implements SplitRead<KeyValue> {
     }
 
     private RecordReader<KeyValue> projectKey(RecordReader<KeyValue> reader) {
-        if (keyProjectedFields == null) {
+        if (requiredKeyType == null) {
             return reader;
         }
 
-        ProjectedRow projectedRow = ProjectedRow.from(keyProjectedFields);
+        ProjectedRow projectedRow = ProjectedRow.from(requiredKeyType.toProjection());
         return reader.transform(kv -> kv.replaceKey(projectedRow.replaceRow(kv.key())));
     }
 
@@ -323,6 +330,6 @@ public class MergeFileSplitRead implements SplitRead<KeyValue> {
     @Nullable
     public UserDefinedSeqComparator createUdsComparator() {
         return UserDefinedSeqComparator.create(
-                readerFactoryBuilder.projectedValueType(), sequenceFields);
+                readerFactoryBuilder.requiredValueType(), sequenceFields);
     }
 }

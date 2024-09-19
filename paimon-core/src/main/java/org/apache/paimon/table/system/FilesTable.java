@@ -55,7 +55,6 @@ import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.RowDataToObjectArrayConverter;
 import org.apache.paimon.utils.SerializationUtils;
 
@@ -277,12 +276,6 @@ public class FilesTable implements ReadonlyTable {
         }
 
         @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
-            return this;
-        }
-
-        @Override
         public TableRead withIOManager(IOManager ioManager) {
             return this;
         }
@@ -343,11 +336,6 @@ public class FilesTable implements ReadonlyTable {
                                                 simpleStatsConverters)));
             }
             Iterator<InternalRow> rows = Iterators.concat(iteratorList.iterator());
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(rows);
         }
 

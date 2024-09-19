@@ -39,9 +39,6 @@ import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.VarCharType;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
-
-import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -156,7 +153,6 @@ public class AllTableOptionsTable implements ReadonlyTable {
     private static class AllTableOptionsRead implements InnerTableRead {
 
         private final FileIO fileIO;
-        private int[][] projection;
 
         public AllTableOptionsRead(FileIO fileIO) {
             this.fileIO = fileIO;
@@ -164,12 +160,6 @@ public class AllTableOptionsTable implements ReadonlyTable {
 
         @Override
         public InnerTableRead withFilter(Predicate predicate) {
-            return this;
-        }
-
-        @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
             return this;
         }
 
@@ -185,11 +175,6 @@ public class AllTableOptionsTable implements ReadonlyTable {
             }
             Map<String, Map<String, Path>> location = ((AllTableSplit) split).allTablePaths;
             Iterator<InternalRow> rows = toRow(options(fileIO, location));
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(rows);
         }
     }

@@ -23,10 +23,7 @@ import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.table.InnerTable;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.Filter;
-import org.apache.paimon.utils.Projection;
-import org.apache.paimon.utils.TypeUtils;
 
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 
@@ -40,7 +37,6 @@ public class ReadBuilderImpl implements ReadBuilder {
     private final InnerTable table;
 
     private Predicate filter;
-    private int[][] projection;
 
     private Integer limit = null;
 
@@ -50,6 +46,8 @@ public class ReadBuilderImpl implements ReadBuilder {
     private Map<String, String> partitionSpec;
 
     private Filter<Integer> bucketFilter;
+
+    private RowType requiredRowType;
 
     public ReadBuilderImpl(InnerTable table) {
         this.table = table;
@@ -62,10 +60,11 @@ public class ReadBuilderImpl implements ReadBuilder {
 
     @Override
     public RowType readType() {
-        if (projection == null) {
+        if (requiredRowType != null) {
+            return requiredRowType;
+        } else {
             return table.rowType();
         }
-        return TypeUtils.project(table.rowType(), Projection.of(projection).toTopLevelIndexes());
     }
 
     @Override
@@ -85,9 +84,15 @@ public class ReadBuilderImpl implements ReadBuilder {
     }
 
     @Override
-    public ReadBuilder withProjection(int[][] projection) {
-        this.projection = projection;
+    public ReadBuilder withRequiredRowType(RowType requiredRowType) {
+        // todo: xinyu 添加类型校验，必须是子集
+        this.requiredRowType = requiredRowType.withOriginalRowType(table.rowType());
         return this;
+    }
+
+    @Override
+    public ReadBuilder withProjection(int[][] projection) {
+        return withRequiredRowType(table.rowType().project(projection));
     }
 
     @Override
@@ -147,8 +152,8 @@ public class ReadBuilderImpl implements ReadBuilder {
     @Override
     public TableRead newRead() {
         InnerTableRead read = table.newRead().withFilter(filter);
-        if (projection != null) {
-            read.withProjection(projection);
+        if (requiredRowType != null) {
+            read.withRequiredRowType(requiredRowType);
         }
         return read;
     }
@@ -164,13 +169,13 @@ public class ReadBuilderImpl implements ReadBuilder {
         ReadBuilderImpl that = (ReadBuilderImpl) o;
         return Objects.equals(table.name(), that.table.name())
                 && Objects.equals(filter, that.filter)
-                && Arrays.deepEquals(projection, that.projection);
+                && Objects.equals(requiredRowType, that.requiredRowType);
     }
 
     @Override
     public int hashCode() {
         int result = Objects.hash(table.name(), filter);
-        result = 31 * result + Arrays.deepHashCode(projection);
+        result = 31 * result + Objects.hash(requiredRowType);
         return result;
     }
 }

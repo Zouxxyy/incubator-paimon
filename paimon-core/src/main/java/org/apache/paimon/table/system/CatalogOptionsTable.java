@@ -36,7 +36,6 @@ import org.apache.paimon.table.source.TableRead;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
 
 import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
 
@@ -144,16 +143,8 @@ public class CatalogOptionsTable implements ReadonlyTable {
 
     private static class CatalogOptionsRead implements InnerTableRead {
 
-        private int[][] projection;
-
         @Override
         public InnerTableRead withFilter(Predicate predicate) {
-            return this;
-        }
-
-        @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
             return this;
         }
 
@@ -171,11 +162,6 @@ public class CatalogOptionsTable implements ReadonlyTable {
                     Iterators.transform(
                             ((CatalogOptionsSplit) split).catalogOptions.entrySet().iterator(),
                             this::toRow);
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(rows);
         }
 

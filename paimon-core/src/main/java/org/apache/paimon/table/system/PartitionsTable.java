@@ -40,11 +40,8 @@ import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.RowDataToObjectArrayConverter;
 import org.apache.paimon.utils.SerializationUtils;
-
-import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -159,12 +156,6 @@ public class PartitionsTable implements ReadonlyTable {
         }
 
         @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
-            return this;
-        }
-
-        @Override
         public TableRead withIOManager(IOManager ioManager) {
             return this;
         }
@@ -187,11 +178,6 @@ public class PartitionsTable implements ReadonlyTable {
             }
 
             Iterator<InternalRow> iterator = results.iterator();
-            if (projection != null) {
-                iterator =
-                        Iterators.transform(
-                                iterator, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(iterator);
         }
 

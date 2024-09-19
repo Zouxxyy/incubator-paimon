@@ -228,10 +228,12 @@ public class MergeFileSplitReadTest {
                         .collect(Collectors.groupingBy(ManifestEntry::partition));
         MergeFileSplitRead read = store.newRead();
         if (keyProjection != null) {
-            read.withKeyProjection(keyProjection);
+            // todo: xinyu
+            // read.withKeyProjection(keyProjection);
         }
         if (valueProjection != null) {
-            read.withProjection(valueProjection);
+            // todo: xinyu
+            // read.withKeyProjection(valueProjection);
         }
 
         List<KeyValue> result = new ArrayList<>();

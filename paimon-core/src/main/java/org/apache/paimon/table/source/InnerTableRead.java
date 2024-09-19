@@ -20,6 +20,7 @@ package org.apache.paimon.table.source;
 
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
+import org.apache.paimon.types.RowType;
 
 import java.util.Arrays;
 import java.util.List;
@@ -45,7 +46,13 @@ public interface InnerTableRead extends TableRead {
         return withProjection(nestedProjection);
     }
 
-    InnerTableRead withProjection(int[][] projection);
+    default InnerTableRead withProjection(int[][] projection) {
+        throw new UnsupportedOperationException();
+    }
+
+    default InnerTableRead withRequiredRowType(RowType requiredRowType) {
+        throw new UnsupportedOperationException();
+    }
 
     default InnerTableRead forceKeepDelete() {
         return this;

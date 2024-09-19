@@ -48,7 +48,6 @@ import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.utils.IteratorRecordReader;
 import org.apache.paimon.utils.Pair;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.SerializationUtils;
 import org.apache.paimon.utils.TagManager;
 
@@ -188,7 +187,6 @@ public class TagsTable implements ReadonlyTable {
     private class TagsRead implements InnerTableRead {
 
         private final FileIO fileIO;
-        private int[][] projection;
 
         public TagsRead(FileIO fileIO) {
             this.fileIO = fileIO;
@@ -197,12 +195,6 @@ public class TagsTable implements ReadonlyTable {
         @Override
         public InnerTableRead withFilter(Predicate predicate) {
             // TODO
-            return this;
-        }
-
-        @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
             return this;
         }
 
@@ -237,11 +229,6 @@ public class TagsTable implements ReadonlyTable {
 
             Iterator<InternalRow> rows =
                     Iterators.transform(nameToSnapshot.entrySet().iterator(), this::toRow);
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(rows);
         }
 

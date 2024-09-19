@@ -41,7 +41,6 @@ import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.SerializationUtils;
 
 import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
@@ -163,7 +162,6 @@ public class ConsumersTable implements ReadonlyTable {
     private class ConsumersRead implements InnerTableRead {
 
         private final FileIO fileIO;
-        private int[][] projection;
 
         public ConsumersRead(FileIO fileIO) {
             this.fileIO = fileIO;
@@ -171,12 +169,6 @@ public class ConsumersTable implements ReadonlyTable {
 
         @Override
         public InnerTableRead withFilter(Predicate predicate) {
-            return this;
-        }
-
-        @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
             return this;
         }
 
@@ -194,11 +186,6 @@ public class ConsumersTable implements ReadonlyTable {
             Map<String, Long> consumers = new ConsumerManager(fileIO, location, branch).consumers();
             Iterator<InternalRow> rows =
                     Iterators.transform(consumers.entrySet().iterator(), this::toRow);
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(rows);
         }
 

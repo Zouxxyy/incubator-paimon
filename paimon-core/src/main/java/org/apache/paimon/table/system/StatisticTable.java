@@ -42,7 +42,6 @@ import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.IteratorRecordReader;
 import org.apache.paimon.utils.JsonSerdeUtil;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.SerializationUtils;
 
 import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
@@ -164,7 +163,6 @@ public class StatisticTable implements ReadonlyTable {
     private static class StatisticRead implements InnerTableRead {
 
         private final FileIO fileIO;
-        private int[][] projection;
 
         private final FileStoreTable dataTable;
 
@@ -176,12 +174,6 @@ public class StatisticTable implements ReadonlyTable {
         @Override
         public InnerTableRead withFilter(Predicate predicate) {
             // TODO
-            return this;
-        }
-
-        @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
             return this;
         }
 
@@ -202,11 +194,6 @@ public class StatisticTable implements ReadonlyTable {
                 Iterator<Statistics> statisticsIterator =
                         Collections.singletonList(statistics).iterator();
                 Iterator<InternalRow> rows = Iterators.transform(statisticsIterator, this::toRow);
-                if (projection != null) {
-                    rows =
-                            Iterators.transform(
-                                    rows, row -> ProjectedRow.from(projection).replaceRow(row));
-                }
                 return new IteratorRecordReader<>(rows);
             } else {
                 return new EmptyRecordReader<>();

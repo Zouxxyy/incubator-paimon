@@ -76,6 +76,7 @@ public class LocalTableQuery implements TableQuery {
 
     @Nullable private Cache<String, LookupFile> lookupFileCache;
 
+    private final RowType rowType;
     private final RowType partitionType;
 
     public LocalTableQuery(FileStoreTable table) {
@@ -89,6 +90,7 @@ public class LocalTableQuery implements TableQuery {
         KeyValueFileStore store = (KeyValueFileStore) tableStore;
 
         this.readerFactoryBuilder = store.newReaderFactoryBuilder();
+        this.rowType = table.schema().logicalRowType();
         this.partitionType = table.schema().logicalPartitionType();
         RowType keyType = readerFactoryBuilder.keyType();
         this.keyComparatorSupplier = new KeyComparatorSupplier(readerFactoryBuilder.keyType());
@@ -152,7 +154,7 @@ public class LocalTableQuery implements TableQuery {
                         keyComparatorSupplier.get(),
                         readerFactoryBuilder.keyType(),
                         new LookupLevels.KeyValueProcessor(
-                                readerFactoryBuilder.projectedValueType()),
+                                readerFactoryBuilder.requiredValueType()),
                         file ->
                                 factory.createRecordReader(
                                         file.schemaId(),
@@ -194,9 +196,11 @@ public class LocalTableQuery implements TableQuery {
         }
     }
 
+    // todo: replace it with withRequiredRowType
     @Override
     public LocalTableQuery withValueProjection(int[][] projection) {
-        this.readerFactoryBuilder.withValueProjection(projection);
+        this.readerFactoryBuilder.withRequiredValueType(
+                rowType.project(projection).withOriginalRowType(rowType));
         return this;
     }
 
@@ -207,7 +211,7 @@ public class LocalTableQuery implements TableQuery {
 
     @Override
     public InternalRowSerializer createValueSerializer() {
-        return InternalSerializers.create(readerFactoryBuilder.projectedValueType());
+        return InternalSerializers.create(readerFactoryBuilder.requiredValueType());
     }
 
     @Override

@@ -52,7 +52,6 @@ import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.SerializationUtils;
 import org.apache.paimon.utils.SnapshotManager;
 
@@ -267,12 +266,6 @@ public class SnapshotsTable implements ReadonlyTable {
         }
 
         @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
-            return this;
-        }
-
-        @Override
         public TableRead withIOManager(IOManager ioManager) {
             return this;
         }
@@ -289,11 +282,6 @@ public class SnapshotsTable implements ReadonlyTable {
                             optionalFilterSnapshotIdMax, optionalFilterSnapshotIdMin);
 
             Iterator<InternalRow> rows = Iterators.transform(snapshots, this::toRow);
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(rows);
         }
 

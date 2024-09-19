@@ -40,11 +40,8 @@ import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.RowDataToObjectArrayConverter;
 import org.apache.paimon.utils.SerializationUtils;
-
-import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -146,8 +143,6 @@ public class BucketsTable implements ReadonlyTable {
 
         private final FileStoreTable fileStoreTable;
 
-        private int[][] projection;
-
         public BucketsRead(FileStoreTable table) {
             this.fileStoreTable = table;
         }
@@ -155,12 +150,6 @@ public class BucketsTable implements ReadonlyTable {
         @Override
         public InnerTableRead withFilter(Predicate predicate) {
             // TODO
-            return this;
-        }
-
-        @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
             return this;
         }
 
@@ -187,11 +176,6 @@ public class BucketsTable implements ReadonlyTable {
             }
 
             Iterator<InternalRow> iterator = results.iterator();
-            if (projection != null) {
-                iterator =
-                        Iterators.transform(
-                                iterator, row -> ProjectedRow.from(projection).replaceRow(row));
-            }
             return new IteratorRecordReader<>(iterator);
         }
 

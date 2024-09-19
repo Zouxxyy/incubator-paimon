@@ -110,6 +110,8 @@ public interface ReadBuilder extends Serializable {
      */
     ReadBuilder withBucketFilter(Filter<Integer> bucketFilter);
 
+    ReadBuilder withRequiredRowType(RowType requiredRowType);
+
     /**
      * Apply projection to the reader.
      *

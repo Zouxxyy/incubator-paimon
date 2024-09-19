@@ -39,7 +39,6 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.VarCharType;
 import org.apache.paimon.utils.IteratorRecordReader;
-import org.apache.paimon.utils.ProjectedRow;
 
 import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
 
@@ -103,7 +102,6 @@ public abstract class TableLineageTable implements ReadonlyTable {
         private final BiFunction<LineageMeta, Predicate, Iterator<TableLineageEntity>>
                 tableLineageQuery;
         @Nullable private Predicate predicate;
-        private int[][] projection;
 
         protected TableLineageRead(
                 LineageMetaFactory lineageMetaFactory,
@@ -123,12 +121,6 @@ public abstract class TableLineageTable implements ReadonlyTable {
         }
 
         @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
-            return this;
-        }
-
-        @Override
         public TableRead withIOManager(IOManager ioManager) {
             return this;
         }
@@ -143,17 +135,11 @@ public abstract class TableLineageTable implements ReadonlyTable {
                                 sourceTableLineages,
                                 entity -> {
                                     checkNotNull(entity);
-                                    GenericRow row =
-                                            GenericRow.of(
-                                                    BinaryString.fromString(entity.getDatabase()),
-                                                    BinaryString.fromString(entity.getTable()),
-                                                    BinaryString.fromString(entity.getJob()),
-                                                    entity.getCreateTime());
-                                    if (projection != null) {
-                                        return ProjectedRow.from(projection).replaceRow(row);
-                                    } else {
-                                        return row;
-                                    }
+                                    return GenericRow.of(
+                                            BinaryString.fromString(entity.getDatabase()),
+                                            BinaryString.fromString(entity.getTable()),
+                                            BinaryString.fromString(entity.getJob()),
+                                            entity.getCreateTime());
                                 }));
             } catch (Exception e) {
                 throw new RuntimeException(e);

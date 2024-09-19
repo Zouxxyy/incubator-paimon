@@ -48,10 +48,7 @@ import org.apache.paimon.utils.BranchManager;
 import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.utils.IteratorRecordReader;
 import org.apache.paimon.utils.Pair;
-import org.apache.paimon.utils.ProjectedRow;
 import org.apache.paimon.utils.SerializationUtils;
-
-import org.apache.paimon.shade.guava30.com.google.common.collect.Iterators;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -188,12 +185,6 @@ public class BranchesTable implements ReadonlyTable {
         }
 
         @Override
-        public InnerTableRead withProjection(int[][] projection) {
-            this.projection = projection;
-            return this;
-        }
-
-        @Override
         public TableRead withIOManager(IOManager ioManager) {
             return this;
         }
@@ -211,12 +202,6 @@ public class BranchesTable implements ReadonlyTable {
                 rows = branches(table).iterator();
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
-            }
-
-            if (projection != null) {
-                rows =
-                        Iterators.transform(
-                                rows, row -> ProjectedRow.from(projection).replaceRow(row));
             }
 
             return new IteratorRecordReader<>(rows);
