@@ -72,6 +72,10 @@ public final class RowType extends DataType {
         this(true, fields);
     }
 
+    public RowType copy(List<DataField> newFields) {
+        return new RowType(isNullable(), newFields);
+    }
+
     public List<DataField> getFields() {
         return fields;
     }
@@ -189,6 +193,25 @@ public final class RowType extends DataType {
         }
         RowType rowType = (RowType) o;
         return fields.equals(rowType.fields);
+    }
+
+    public boolean subsetOf(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        RowType rowType = (RowType) o;
+        for (DataField field : fields) {
+            if (!field.subsetOf(rowType.getField(field.name()))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

@@ -285,7 +285,7 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
         }
 
         private List<DataField> getRequiredTableFields(RowType readKeyType, RowType readValueType) {
-            // need extract read key fields firstly
+            // need extract key fields by extractor firstly
             return KeyValue.createKeyValueFields(
                     extractor.keyFields(readKeyType.getFields()), readValueType.getFields());
         }

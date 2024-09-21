@@ -85,8 +85,13 @@ public class ReadBuilderImpl implements ReadBuilder {
 
     @Override
     public ReadBuilder withRequiredRowType(RowType requiredRowType) {
-        // todo: xinyu 添加类型校验，必须是子集
-        this.requiredRowType = requiredRowType.withOriginalRowType(table.rowType());
+        RowType tableRowType = table.rowType();
+        checkState(
+                requiredRowType.subsetOf(tableRowType),
+                "requiredRowType must be subset of tableRowType, requiredRowType: %s, tableRowType: %s",
+                requiredRowType,
+                tableRowType);
+        this.requiredRowType = requiredRowType.withOriginalRowType(tableRowType);
         return this;
     }
 

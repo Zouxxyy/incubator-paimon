@@ -31,13 +31,13 @@ import org.apache.paimon.types.RowType;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static org.apache.paimon.predicate.PredicateBuilder.excludePredicateWithFields;
+import static org.apache.paimon.utils.Preconditions.checkState;
 
 /** Class with index mapping and bulk format. */
 public class BulkFormatMapping {
@@ -113,25 +113,26 @@ public class BulkFormatMapping {
         public BulkFormatMapping build(
                 String formatIdentifier, TableSchema tableSchema, TableSchema dataSchema) {
 
-            Set<Integer> requiredFieldIds =
-                    requiredTableFields.stream().map(DataField::id).collect(Collectors.toSet());
-            List<DataField> requiredDataFields =
-                    fieldsExtractor.apply(dataSchema).stream()
-                            .filter(field -> requiredFieldIds.contains(field.id()))
-                            .collect(Collectors.toList());
+            List<DataField> requiredDataFields = requiredDataFields(dataSchema);
 
+            // build index cast mapping
             IndexCastMapping indexCastMapping =
                     SchemaEvolutionUtil.createIndexCastMapping(
                             requiredTableFields, requiredDataFields);
 
-            Pair<Pair<int[], RowType>, List<DataField>> partitionMappingAndFieldsWithoutPartition =
-                    PartitionUtils.constructPartitionMapping(dataSchema, requiredDataFields);
+            // build partition mapping and filter partition fields
+            Pair<Pair<int[], RowType>, List<DataField>>
+                    partitionMappingAndFieldsWithoutPartitionPair =
+                            PartitionUtils.constructPartitionMapping(
+                                    dataSchema, requiredDataFields);
             Pair<int[], RowType> partitionMapping =
-                    partitionMappingAndFieldsWithoutPartition.getLeft();
+                    partitionMappingAndFieldsWithoutPartitionPair.getLeft();
 
-            RowType requiredDataRowType =
-                    new RowType(partitionMappingAndFieldsWithoutPartition.getRight());
+            // build read row type
+            RowType readDataRowType =
+                    new RowType(partitionMappingAndFieldsWithoutPartitionPair.getRight());
 
+            // build read filters
             List<Predicate> readFilters = readFilters(filters, tableSchema, dataSchema);
 
             return new BulkFormatMapping(
@@ -140,9 +141,38 @@ public class BulkFormatMapping {
                     partitionMapping,
                     formatDiscover
                             .discover(formatIdentifier)
-                            .createReaderFactory(requiredDataRowType, readFilters),
+                            .createReaderFactory(readDataRowType, readFilters),
                     dataSchema,
                     readFilters);
+        }
+
+        private List<DataField> requiredDataFields(TableSchema dataSchema) {
+            List<DataField> dataFields = fieldsExtractor.apply(dataSchema);
+            ArrayList<DataField> requiredDataFields = new ArrayList<>();
+            for (DataField dataField : dataFields) {
+                requiredTableFields.stream()
+                        .filter(f -> f.id() == dataField.id())
+                        .findFirst()
+                        .ifPresent(
+                                f -> {
+                                    if (f.type() instanceof RowType) {
+                                        RowType tableFieldType = (RowType) f.type();
+                                        RowType dataFieldType = (RowType) dataField.type();
+                                        checkState(tableFieldType.subsetOf(dataFieldType));
+                                        // Since the nested type schema evolution is not supported,
+                                        // directly copy the fields from tableField's type to
+                                        // dataField's type.
+                                        // todo: support nested type schema evolutions.
+                                        requiredDataFields.add(
+                                                dataField.newType(
+                                                        dataFieldType.copy(
+                                                                tableFieldType.getFields())));
+                                    } else {
+                                        requiredDataFields.add(dataField);
+                                    }
+                                });
+            }
+            return requiredDataFields;
         }
 
         private List<Predicate> readFilters(
@@ -153,7 +183,7 @@ public class BulkFormatMapping {
                             : SchemaEvolutionUtil.createDataFilters(
                                     tableSchema.fields(), dataSchema.fields(), filters);
 
-            // Skip pushing down partition filters to reader
+            // Skip pushing down partition filters to reader.
             return excludePredicateWithFields(
                     dataFilters, new HashSet<>(dataSchema.partitionKeys()));
         }

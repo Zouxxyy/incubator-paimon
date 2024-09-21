@@ -421,8 +421,8 @@ public abstract class FileStoreTableTestBase {
                                 3,
                                 "f1",
                                 DataTypes.ROW(
-                                        DataTypes.FIELD(4, "f0", DataTypes.INT()),
-                                        DataTypes.FIELD(6, "f2", DataTypes.INT()))));
+                                        DataTypes.FIELD(6, "f2", DataTypes.INT()),
+                                        DataTypes.FIELD(4, "f0", DataTypes.INT()))));
 
         ReadBuilder readBuilder = table.newReadBuilder().withRequiredRowType(readType);
         List<Split> splits = readBuilder.newScan().plan().splits();
@@ -432,7 +432,7 @@ public abstract class FileStoreTableTestBase {
             reader.forEachRemaining(row -> result.add(serializer.copy(row)));
         }
 
-        assertThat(result).containsExactly(GenericRow.of(GenericRow.of(10, 12)));
+        assertThat(result).containsExactly(GenericRow.of(GenericRow.of(12, 10)));
     }
 
     protected void innerTestWithShard(FileStoreTable table) throws Exception {
