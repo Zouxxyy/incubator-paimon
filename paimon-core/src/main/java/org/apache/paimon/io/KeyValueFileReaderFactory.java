@@ -188,6 +188,7 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
         private final FileStorePathFactory pathFactory;
         private final KeyValueFieldsExtractor extractor;
         private final CoreOptions options;
+
         private RowType requiredKeyType;
         private RowType requiredValueType;
 
@@ -210,6 +211,7 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
             this.pathFactory = pathFactory;
             this.extractor = extractor;
             this.options = options;
+
             this.requiredKeyType = keyType;
             this.requiredValueType = valueType;
         }
@@ -264,7 +266,8 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
                         return KeyValue.createKeyValueFields(dataKeyFields, dataValueFields);
                     };
             List<DataField> requiredTableFields =
-                    getRequiredTableFields(readKeyType, requiredValueType);
+                    KeyValue.createKeyValueFields(
+                            readKeyType.getFields(), requiredValueType.getFields());
 
             return new KeyValueFileReaderFactory(
                     fileIO,
@@ -282,12 +285,6 @@ public class KeyValueFileReaderFactory implements FileReaderFactory<KeyValue> {
 
         public FileIO fileIO() {
             return fileIO;
-        }
-
-        private List<DataField> getRequiredTableFields(RowType readKeyType, RowType readValueType) {
-            // need extract key fields by extractor firstly
-            return KeyValue.createKeyValueFields(
-                    extractor.keyFields(readKeyType.getFields()), readValueType.getFields());
         }
     }
 }

@@ -37,10 +37,6 @@ public interface KeyValueFieldsExtractor extends Serializable {
      */
     List<DataField> keyFields(TableSchema schema);
 
-    default List<DataField> keyFields(List<DataField> keyFields) {
-        return keyFields;
-    }
-
     /**
      * Extract value fields from table schema.
      *

@@ -107,12 +107,7 @@ public class LocalMergeOperator extends AbstractStreamOperator<InternalRow>
                                     // partition fields.
                                     @Override
                                     public List<DataField> keyFields(TableSchema schema) {
-                                        return keyFields(schema.primaryKeysFields());
-                                    }
-
-                                    @Override
-                                    public List<DataField> keyFields(List<DataField> keyFields) {
-                                        return addKeyNamePrefix(keyFields);
+                                        return addKeyNamePrefix(schema.primaryKeysFields());
                                     }
 
                                     @Override

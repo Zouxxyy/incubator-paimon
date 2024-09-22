@@ -393,6 +393,7 @@ public abstract class FileStoreTableTestBase {
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {"avro", "orc", "parquet"})
     public void testRequiredRowType(String format) throws Exception {
+        // !!!
         RowType writeType =
                 DataTypes.ROW(
                         DataTypes.FIELD(0, "pt", DataTypes.INT()),

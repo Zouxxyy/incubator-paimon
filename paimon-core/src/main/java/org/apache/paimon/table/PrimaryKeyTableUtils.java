@@ -87,12 +87,7 @@ public class PrimaryKeyTableUtils {
 
         @Override
         public List<DataField> keyFields(TableSchema schema) {
-            return keyFields(schema.trimmedPrimaryKeysFields());
-        }
-
-        @Override
-        public List<DataField> keyFields(List<DataField> keyFields) {
-            return addKeyNamePrefix(keyFields);
+            return addKeyNamePrefix(schema.trimmedPrimaryKeysFields());
         }
 
         @Override

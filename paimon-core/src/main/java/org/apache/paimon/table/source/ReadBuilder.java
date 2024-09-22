@@ -40,7 +40,7 @@ import java.util.Map;
  * Table table = catalog.getTable(...);
  * ReadBuilder builder = table.newReadBuilder()
  *     .withFilter(...)
- *     .withProjection(...);
+ *     .withRequiredRowType(...);
  *
  * // 2. Plan splits in 'Coordinator' (or named 'Driver'):
  * List<Split> splits = builder.newScan().plan().splits();
@@ -75,7 +75,7 @@ public interface ReadBuilder extends Serializable {
     /** A name to identify the table. */
     String tableName();
 
-    /** Returns read row type, projected by {@link #withProjection}. */
+    /** Returns read row type. */
     RowType readType();
 
     /**
@@ -110,13 +110,15 @@ public interface ReadBuilder extends Serializable {
      */
     ReadBuilder withBucketFilter(Filter<Integer> bucketFilter);
 
+    /**
+     * Push required rowType, support nested row pruning.
+     *
+     * @since 1.0.0
+     */
     ReadBuilder withRequiredRowType(RowType requiredRowType);
 
-    /**
-     * Apply projection to the reader.
-     *
-     * <p>NOTE: Nested row projection is currently not supported.
-     */
+    /** Apply projection to the reader, Use {@link #withRequiredRowType(RowType)} instead. */
+    @Deprecated
     default ReadBuilder withProjection(int[] projection) {
         if (projection == null) {
             return this;
@@ -126,10 +128,8 @@ public interface ReadBuilder extends Serializable {
         return withProjection(nestedProjection);
     }
 
-    /**
-     * Push nested projection. For example, {@code [[0, 2, 1], ...]} specifies to include the 2nd
-     * field of the 3rd field of the 1st field in the top-level row.
-     */
+    /** Apply projection to the reader, Use {@link #withRequiredRowType(RowType)} instead. */
+    @Deprecated
     ReadBuilder withProjection(int[][] projection);
 
     /** the row number pushed down. */
