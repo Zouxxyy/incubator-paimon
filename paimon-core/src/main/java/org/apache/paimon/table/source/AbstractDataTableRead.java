@@ -73,6 +73,9 @@ public abstract class AbstractDataTableRead<T> implements InnerTableRead {
 
     @Override
     public final InnerTableRead withProjection(int[][] projection) {
+        if (projection == null) {
+            return this;
+        }
         RowType rowType = schema.logicalRowType();
         RowType requiredRowType = rowType.project(projection).withOriginalRowType(rowType);
         return withRequiredRowType(requiredRowType);
