@@ -281,7 +281,7 @@ public final class RowType extends DataType {
 
     // 如果 toProjection 和 withNewProjection 没有被调用，那么移除该方法
     public RowType withOriginalRowType(RowType originalRowType) {
-        if (this.originalRowType != null) {
+        if (this.originalRowType != null && !originalRowType.equals(this.originalRowType)) {
             throw new RuntimeException();
         }
         this.originalRowType = originalRowType;

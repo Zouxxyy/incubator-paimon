@@ -91,7 +91,7 @@ public class ReadBuilderImpl implements ReadBuilder {
                 "requiredRowType must be subset of tableRowType, requiredRowType: %s, tableRowType: %s",
                 requiredRowType,
                 tableRowType);
-        this.requiredRowType = requiredRowType.withOriginalRowType(tableRowType);
+        this.requiredRowType = requiredRowType;
         return this;
     }
 
