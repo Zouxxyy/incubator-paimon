@@ -92,7 +92,6 @@ public class TestKeyValueGenerator {
 
     public static final List<String> KEY_NAME_LIST = Arrays.asList("shopId", "orderId");
 
-    // todo: xinyu fix it
     public static final RowType KEY_TYPE =
             RowType.of(
                     new DataField(

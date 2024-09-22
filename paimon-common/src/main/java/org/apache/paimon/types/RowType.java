@@ -289,6 +289,9 @@ public final class RowType extends DataType {
     }
 
     public int[] toProjection() {
+        if (fields.isEmpty()) {
+            return new int[0];
+        }
         if (originalRowType == null) {
             throw new RuntimeException();
         }
