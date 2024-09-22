@@ -97,6 +97,9 @@ public class ReadBuilderImpl implements ReadBuilder {
 
     @Override
     public ReadBuilder withProjection(int[][] projection) {
+        if (projection == null) {
+            return this;
+        }
         return withRequiredRowType(table.rowType().project(projection));
     }
 
