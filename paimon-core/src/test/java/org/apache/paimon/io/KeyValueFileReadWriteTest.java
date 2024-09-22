@@ -37,11 +37,7 @@ import org.apache.paimon.manifest.FileSource;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.stats.StatsTestUtils;
-import org.apache.paimon.types.BigIntType;
-import org.apache.paimon.types.DataType;
-import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.RowType;
-import org.apache.paimon.types.VarCharType;
 import org.apache.paimon.utils.CloseableIterator;
 import org.apache.paimon.utils.FailingFileIO;
 import org.apache.paimon.utils.FileStorePathFactory;
@@ -150,7 +146,7 @@ public class KeyValueFileReadWriteTest {
     }
 
     @Test
-    public void testKeyProjection() throws Exception {
+    public void testRequiredKeyType() throws Exception {
         DataFileTestDataGenerator.Data data = gen.next();
         KeyValueFileWriterFactory writerFactory = createWriterFactory(tempDir.toString(), "avro");
         DataFileMetaSerializer serializer = new DataFileMetaSerializer();
@@ -162,14 +158,9 @@ public class KeyValueFileReadWriteTest {
         List<DataFileMeta> actualMetas = writer.result();
 
         // projection: (shopId, orderId) -> (orderId)
+        RowType projectedKeyType = KEY_TYPE.project("key_orderId");
         KeyValueFileReaderFactory readerFactory =
-                createReaderFactory(tempDir.toString(), "avro", new int[][] {new int[] {1}}, null);
-        RowType projectedKeyType =
-                RowType.builder()
-                        .fields(
-                                new DataType[] {new BigIntType(false)},
-                                new String[] {"key_orderId"})
-                        .build();
+                createReaderFactory(tempDir.toString(), "avro", projectedKeyType, null);
         InternalRowSerializer projectedKeySerializer = new InternalRowSerializer(projectedKeyType);
         assertData(
                 data,
@@ -188,7 +179,7 @@ public class KeyValueFileReadWriteTest {
     }
 
     @Test
-    public void testValueProjection() throws Exception {
+    public void testRequiredValueType() throws Exception {
         DataFileTestDataGenerator.Data data = gen.next();
         KeyValueFileWriterFactory writerFactory = createWriterFactory(tempDir.toString(), "avro");
         DataFileMetaSerializer serializer = new DataFileMetaSerializer();
@@ -202,21 +193,9 @@ public class KeyValueFileReadWriteTest {
         // projection:
         // (dt, hr, shopId, orderId, itemId, priceAmount, comment) ->
         // (shopId, itemId, dt, hr)
+        RowType projectedValueType = DEFAULT_ROW_TYPE.project("shopId", "itemId", "dt", "hr");
         KeyValueFileReaderFactory readerFactory =
-                createReaderFactory(
-                        tempDir.toString(),
-                        "avro",
-                        null,
-                        new int[][] {new int[] {2}, new int[] {4}, new int[] {0}, new int[] {1}});
-        RowType projectedValueType =
-                RowType.of(
-                        new DataType[] {
-                            new IntType(false),
-                            new BigIntType(),
-                            new VarCharType(false, 8),
-                            new IntType(false)
-                        },
-                        new String[] {"shopId", "itemId", "dt", "hr"});
+                createReaderFactory(tempDir.toString(), "avro", null, projectedValueType);
         InternalRowSerializer projectedValueSerializer =
                 new InternalRowSerializer(projectedValueType);
         assertData(
@@ -283,7 +262,7 @@ public class KeyValueFileReadWriteTest {
     }
 
     private KeyValueFileReaderFactory createReaderFactory(
-            String pathStr, String format, int[][] keyProjection, int[][] valueProjection) {
+            String pathStr, String format, RowType requiredKeyType, RowType requiredValueType) {
         Path path = new Path(pathStr);
         FileIO fileIO = FileIOFinder.find(path);
         FileStorePathFactory pathFactory = createNonPartFactory(path);
@@ -298,13 +277,11 @@ public class KeyValueFileReadWriteTest {
                         pathFactory,
                         new TestKeyValueGenerator.TestKeyValueFieldsExtractor(),
                         new CoreOptions(new HashMap<>()));
-        if (keyProjection != null) {
-            // todo: xinyu
-            // builder.withKeyProjection(keyProjection);
+        if (requiredKeyType != null) {
+            builder.withRequiredKeyType(requiredKeyType);
         }
-        if (valueProjection != null) {
-            // todo: xinyu
-            // builder.withValueProjection(valueProjection);
+        if (requiredValueType != null) {
+            builder.withRequiredValueType(requiredValueType);
         }
         return builder.build(BinaryRow.EMPTY_ROW, 0, DeletionVector.emptyFactory());
     }

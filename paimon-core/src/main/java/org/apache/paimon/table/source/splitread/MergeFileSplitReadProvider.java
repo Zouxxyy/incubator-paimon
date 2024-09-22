@@ -48,7 +48,7 @@ public class MergeFileSplitReadProvider implements SplitReadProvider {
     }
 
     private SplitRead<InternalRow> create(Supplier<MergeFileSplitRead> supplier) {
-        final MergeFileSplitRead read = supplier.get().withRequiredKeyType(RowType.empty());
+        final MergeFileSplitRead read = supplier.get().withRequiredKeyType(RowType.of());
         return SplitRead.convert(read, split -> unwrap(read.createReader(split)));
     }
 

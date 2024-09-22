@@ -53,7 +53,7 @@ public class IncrementalChangelogReadProvider implements SplitReadProvider {
     }
 
     private SplitRead<InternalRow> create(Supplier<MergeFileSplitRead> supplier) {
-        final MergeFileSplitRead read = supplier.get().withRequiredKeyType(RowType.empty());
+        final MergeFileSplitRead read = supplier.get().withRequiredKeyType(RowType.of());
         IOFunction<DataSplit, RecordReader<InternalRow>> convertedFactory =
                 split -> {
                     RecordReader<KeyValue> reader =

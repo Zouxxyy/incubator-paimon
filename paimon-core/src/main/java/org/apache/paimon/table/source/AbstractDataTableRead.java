@@ -38,8 +38,10 @@ public abstract class AbstractDataTableRead<T> implements InnerTableRead {
     private RowType requiredRowType;
     private boolean executeFilter = false;
     private Predicate predicate;
+    private final TableSchema schema;
 
     public AbstractDataTableRead(TableSchema schema) {
+        this.schema = schema;
         this.defaultValueAssigner = schema == null ? null : DefaultValueAssigner.create(schema);
     }
 
@@ -71,8 +73,9 @@ public abstract class AbstractDataTableRead<T> implements InnerTableRead {
 
     @Override
     public final InnerTableRead withProjection(int[][] projection) {
-        // todo: xinyu projection to RowType requiredRowType
-        return withRequiredRowType(null);
+        RowType rowType = schema.logicalRowType();
+        RowType requiredRowType = rowType.project(projection).withOriginalRowType(rowType);
+        return withRequiredRowType(requiredRowType);
     }
 
     @Override

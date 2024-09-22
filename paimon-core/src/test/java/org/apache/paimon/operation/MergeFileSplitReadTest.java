@@ -96,17 +96,23 @@ public class MergeFileSplitReadTest {
         // remove zero occurrence, it might be merged and discarded by the merge tree
         expected.entrySet().removeIf(e -> e.getValue() == 0);
 
-        RowType partitionType = RowType.of(new DataType[] {new IntType(false)}, new String[] {"c"});
+        RowType rowType =
+                RowType.of(
+                        new DataType[] {
+                            new IntType(false),
+                            new IntType(false),
+                            new IntType(false),
+                            new BigIntType(false)
+                        },
+                        new String[] {"a", "b", "c", "count"});
+
+        RowType partitionType = rowType.project("c");
         InternalRowSerializer partitionSerializer = new InternalRowSerializer(partitionType);
         List<String> keyNames = Arrays.asList("a", "b", "c");
-        RowType keyType =
-                RowType.of(
-                        new DataType[] {new IntType(false), new IntType(false), new IntType(false)},
-                        keyNames.toArray(new String[0]));
-        RowType projectedKeyType = RowType.of(new IntType(false), new IntType(false));
+        RowType keyType = rowType.project(keyNames);
+        RowType projectedKeyType = rowType.project("b", "a");
         InternalRowSerializer projectedKeySerializer = new InternalRowSerializer(projectedKeyType);
-        RowType valueType =
-                RowType.of(new DataType[] {new BigIntType(false)}, new String[] {"count"});
+        RowType valueType = rowType.project("count");
         InternalRowSerializer valueSerializer = new InternalRowSerializer(valueType);
 
         TestFileStore store =
@@ -137,7 +143,7 @@ public class MergeFileSplitReadTest {
         List<KeyValue> readData =
                 writeThenRead(
                         data,
-                        new int[][] {new int[] {1}, new int[] {0}},
+                        projectedKeyType.withOriginalRowType(rowType),
                         null,
                         projectedKeySerializer,
                         valueSerializer,
@@ -197,7 +203,9 @@ public class MergeFileSplitReadTest {
                 writeThenRead(
                         data,
                         null,
-                        new int[][] {new int[] {2}, new int[] {4}, new int[] {0}, new int[] {1}},
+                        TestKeyValueGenerator.DEFAULT_ROW_TYPE
+                                .project("shopId", "itemId", "dt", "hr")
+                                .withOriginalRowType(TestKeyValueGenerator.DEFAULT_ROW_TYPE),
                         TestKeyValueGenerator.KEY_SERIALIZER,
                         projectedValueSerializer,
                         store,
@@ -213,8 +221,8 @@ public class MergeFileSplitReadTest {
 
     private List<KeyValue> writeThenRead(
             List<KeyValue> data,
-            int[][] keyProjection,
-            int[][] valueProjection,
+            RowType requiredKeyType,
+            RowType requiredValueType,
             InternalRowSerializer projectedKeySerializer,
             InternalRowSerializer projectedValueSerializer,
             TestFileStore store,
@@ -227,13 +235,11 @@ public class MergeFileSplitReadTest {
                 scan.withSnapshot(snapshotId).plan().files().stream()
                         .collect(Collectors.groupingBy(ManifestEntry::partition));
         MergeFileSplitRead read = store.newRead();
-        if (keyProjection != null) {
-            // todo: xinyu
-            // read.withKeyProjection(keyProjection);
+        if (requiredKeyType != null) {
+            read.withRequiredKeyType(requiredKeyType);
         }
-        if (valueProjection != null) {
-            // todo: xinyu
-            // read.withKeyProjection(valueProjection);
+        if (requiredValueType != null) {
+            read.withRequiredRowType(requiredValueType);
         }
 
         List<KeyValue> result = new ArrayList<>();

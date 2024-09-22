@@ -80,10 +80,6 @@ public final class RowType extends DataType {
         return fields;
     }
 
-    public static RowType empty() {
-        return new RowType(Collections.emptyList());
-    }
-
     public List<String> getFieldNames() {
         return fields.stream().map(DataField::name).collect(Collectors.toList());
     }
@@ -279,6 +275,10 @@ public final class RowType extends DataType {
                         .collect(Collectors.toList()));
     }
 
+    public RowType project(String... names) {
+        return project(Arrays.asList(names));
+    }
+
     // 如果 toProjection 和 withNewProjection 没有被调用，那么移除该方法
     public RowType withOriginalRowType(RowType originalRowType) {
         if (this.originalRowType != null) {
@@ -302,6 +302,15 @@ public final class RowType extends DataType {
             throw new RuntimeException();
         }
         return originalRowType.project(projection).withOriginalRowType(originalRowType);
+    }
+
+    public static RowType of() {
+        return new RowType(true, Collections.emptyList());
+    }
+
+    public static RowType of(DataField... fields) {
+        final List<DataField> fs = new ArrayList<>(Arrays.asList(fields));
+        return new RowType(true, fs);
     }
 
     public static RowType of(DataType... types) {
