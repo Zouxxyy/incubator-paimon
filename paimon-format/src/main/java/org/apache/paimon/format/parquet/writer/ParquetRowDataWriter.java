@@ -23,6 +23,9 @@ import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.data.variant.PaimonShreddingUtils;
+import org.apache.paimon.data.variant.Variant;
+import org.apache.paimon.data.variant.VariantSchema;
 import org.apache.paimon.format.parquet.ParquetSchemaConverter;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataType;
@@ -33,6 +36,7 @@ import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.MultisetType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.types.VariantType;
 
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.io.api.RecordConsumer;
@@ -127,6 +131,8 @@ public class ParquetRowDataWriter {
                         ((MultisetType) t).getElementType(), new IntType(false), groupType);
             } else if (t instanceof RowType && type instanceof GroupType) {
                 return new RowWriter((RowType) t, groupType);
+            } else if (t instanceof VariantType && type instanceof GroupType) {
+                return new VariantWriter((VariantType) t, groupType);
             } else {
                 throw new UnsupportedOperationException("Unsupported type: " + type);
             }
@@ -540,6 +546,66 @@ public class ParquetRowDataWriter {
             InternalRow rowData = arrayData.getRow(ordinal, fieldWriters.length);
             write(rowData);
             recordConsumer.endGroup();
+        }
+    }
+
+    private class VariantWriter implements FieldWriter {
+        private final VariantSchema variantSchema;
+        private final FieldWriter[] fieldWriters;
+        private final String[] fieldNames;
+
+        public VariantWriter(VariantType variantType, GroupType groupType) {
+            if (variantType.writeShreddingSchema() != null) {
+                RowType rowType = variantType.writeShreddingSchema();
+                this.variantSchema =
+                        PaimonShreddingUtils.buildVariantSchema(variantType.writeShreddingSchema());
+                this.fieldNames = rowType.getFieldNames().toArray(new String[0]);
+                List<DataType> fieldTypes = rowType.getFieldTypes();
+                this.fieldWriters = new FieldWriter[rowType.getFieldCount()];
+                for (int i = 0; i < fieldWriters.length; i++) {
+                    fieldWriters[i] = createWriter(fieldTypes.get(i), groupType.getType(i));
+                }
+            } else {
+                this.variantSchema = null;
+                this.fieldNames = null;
+                this.fieldWriters = null;
+            }
+        }
+
+        @Override
+        public void write(InternalRow row, int ordinal) {
+            writeVariant(row.getVariant(ordinal));
+        }
+
+        @Override
+        public void write(InternalArray arrayData, int ordinal) {
+            writeVariant(arrayData.getVariant(ordinal));
+        }
+
+        private void writeVariant(Variant variant) {
+            if (variantSchema != null) {
+                recordConsumer.startGroup();
+                InternalRow row = PaimonShreddingUtils.castShredded(variant, variantSchema);
+                for (int i = 0; i < fieldWriters.length; i++) {
+                    if (!row.isNullAt(i)) {
+                        String fieldName = fieldNames[i];
+                        FieldWriter writer = fieldWriters[i];
+                        recordConsumer.startField(fieldName, i);
+                        writer.write(row, i);
+                        recordConsumer.endField(fieldName, i);
+                    }
+                }
+                recordConsumer.endGroup();
+            } else {
+                recordConsumer.startGroup();
+                recordConsumer.startField("value", 0);
+                recordConsumer.addBinary(Binary.fromReusedByteArray(variant.getValue()));
+                recordConsumer.endField("value", 0);
+                recordConsumer.startField("metadata", 1);
+                recordConsumer.addBinary(Binary.fromReusedByteArray(variant.getMetadata()));
+                recordConsumer.endField("metadata", 1);
+                recordConsumer.endGroup();
+            }
         }
     }
 

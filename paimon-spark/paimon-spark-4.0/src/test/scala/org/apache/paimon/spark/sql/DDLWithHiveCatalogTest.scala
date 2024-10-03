@@ -18,4 +18,10 @@
 
 package org.apache.paimon.spark.sql
 
-class DDLWithHiveCatalogTest extends DDLWithHiveCatalogTestBase {}
+class DDLWithHiveCatalogTest extends DDLWithHiveCatalogTestBase {
+  test("Paimon Variant: read and write variant") {
+    sql("CREATE TABLE T (id INT, v VARIANT) USING paimon")
+    sql("INSERT INTO T VALUES (1, parse_json('{\"age\":35,\"city\":\"Chicago\"}'))")
+    sql("SELECT * FROM T").show()
+  }
+}

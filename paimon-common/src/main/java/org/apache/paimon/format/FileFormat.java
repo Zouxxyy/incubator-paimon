@@ -116,6 +116,8 @@ public abstract class FileFormat {
         for (String key : options.keySet()) {
             if (key.toLowerCase().startsWith(prefix)) {
                 result.put(prefix + key.substring(prefix.length()), options.get(key));
+            } else if (key.startsWith("shredding")) {
+                result.put(key, options.get(key));
             }
         }
         return new Options(result);

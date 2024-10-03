@@ -24,7 +24,7 @@ import org.apache.paimon.table.Table
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{Metadata, StructType}
 
 import scala.collection.mutable
 
@@ -92,6 +92,7 @@ abstract class PaimonBaseScanBuilder(table: Table)
   }
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
+//    val s = StructType(Array(requiredSchema.fields.apply(0).copy(metadata = Metadata.fromJson("""{"requiredColumns":"age"}"""))))
     this.requiredSchema = requiredSchema
   }
 }

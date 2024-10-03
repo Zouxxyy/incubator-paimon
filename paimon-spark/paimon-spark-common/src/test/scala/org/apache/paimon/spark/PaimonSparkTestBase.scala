@@ -57,7 +57,7 @@ class PaimonSparkTestBase
 
   /** Add paimon ([[SparkCatalog]] in fileSystem) catalog */
   override protected def sparkConf: SparkConf = {
-    val serializer = if (Random.nextBoolean()) {
+    val serializer = if (false) {
       "org.apache.spark.serializer.KryoSerializer"
     } else {
       "org.apache.spark.serializer.JavaSerializer"
@@ -68,6 +68,8 @@ class PaimonSparkTestBase
       .set("spark.sql.catalog.paimon.cache-enabled", "false")
       .set("spark.sql.extensions", classOf[PaimonSparkSessionExtensions].getName)
       .set("spark.serializer", serializer)
+//      .set("spark.eventLog.enabled", "true")
+//      .set("spark.eventLog.dir", "/Users/zxy/data/spark/history")
   }
 
   override protected def beforeAll(): Unit = {

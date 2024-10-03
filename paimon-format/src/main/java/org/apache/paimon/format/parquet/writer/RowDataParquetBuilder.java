@@ -19,9 +19,12 @@
 package org.apache.paimon.format.parquet.writer;
 
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.data.variant.PaimonShreddingUtils;
 import org.apache.paimon.format.parquet.ColumnConfigParser;
 import org.apache.paimon.options.Options;
+import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.types.VariantType;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.column.ParquetProperties;
@@ -31,6 +34,7 @@ import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.io.OutputFile;
 
 import java.io.IOException;
+import java.util.List;
 
 /** A {@link ParquetBuilder} for {@link InternalRow}. */
 public class RowDataParquetBuilder implements ParquetBuilder<InternalRow> {
@@ -39,8 +43,27 @@ public class RowDataParquetBuilder implements ParquetBuilder<InternalRow> {
     private final Configuration conf;
 
     public RowDataParquetBuilder(RowType rowType, Options options) {
-        this.rowType = rowType;
         this.conf = new Configuration(false);
+        List<DataField> fields = rowType.getFields();
+        List<DataField> newFields =
+                fields.stream()
+                        .map(
+                                x -> {
+                                    if (x.type() instanceof VariantType) {
+                                        VariantType variantType = (VariantType) x.type();
+                                        String k = "shredding." + x.name() + ".schema";
+                                        if (options.containsKey(k)) {
+                                            String v = options.get(k);
+                                            variantType.setWriteShreddingSchema(
+                                                    PaimonShreddingUtils.variantShreddingSchema(
+                                                            PaimonShreddingUtils.fromString(v)));
+                                            return x.newType(variantType);
+                                        }
+                                    }
+                                    return x;
+                                })
+                        .toList();
+        this.rowType = rowType.copy(newFields);
         options.toMap().forEach(conf::set);
     }
 

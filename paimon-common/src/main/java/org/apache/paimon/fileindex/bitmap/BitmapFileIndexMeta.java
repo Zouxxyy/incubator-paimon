@@ -41,6 +41,7 @@ import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
+import org.apache.paimon.types.VariantType;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -138,6 +139,11 @@ public class BitmapFileIndexMeta {
                 dataType.accept(
                         new DataTypeVisitorAdapter<ThrowableConsumer>() {
                             @Override
+                            public ThrowableConsumer visit(VariantType variantType) {
+                                throw new UnsupportedOperationException();
+                            }
+
+                            @Override
                             public ThrowableConsumer visitBinaryString() {
                                 return o -> {
                                     byte[] bytes = ((BinaryString) o).toBytes();
@@ -194,6 +200,11 @@ public class BitmapFileIndexMeta {
         ThrowableSupplier valueReader =
                 dataType.accept(
                         new DataTypeVisitorAdapter<ThrowableSupplier>() {
+                            @Override
+                            public ThrowableSupplier visit(VariantType variantType) {
+                                throw new UnsupportedOperationException();
+                            }
+
                             @Override
                             public ThrowableSupplier visitBinaryString() {
                                 return () -> {

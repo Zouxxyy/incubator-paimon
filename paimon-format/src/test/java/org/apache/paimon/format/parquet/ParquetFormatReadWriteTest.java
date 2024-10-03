@@ -19,6 +19,7 @@
 package org.apache.paimon.format.parquet;
 
 import org.apache.paimon.data.GenericRow;
+import org.apache.paimon.data.variant.Variant;
 import org.apache.paimon.format.FileFormat;
 import org.apache.paimon.format.FileFormatFactory;
 import org.apache.paimon.format.FormatReadWriteTest;
@@ -34,9 +35,11 @@ import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -86,5 +89,33 @@ public class ParquetFormatReadWriteTest extends FormatReadWriteTest {
                 }
             }
         }
+    }
+
+    @Test
+    public void testReadWriteShreddingVariant() throws IOException {
+        Options options = new Options();
+        options.set("shredding.v.schema", "age:string,city:string");
+        FileFormat format =
+                new ParquetFileFormat(new FileFormatFactory.FormatContext(options, 1024, 1024));
+
+        RowType writeType = DataTypes.ROW(DataTypes.FIELD(0, "v", DataTypes.VARIANT()));
+
+        try (PositionOutputStream out = fileIO.newOutputStream(file, false);
+                FormatWriter writer = format.createWriterFactory(writeType).create(out, "zstd")) {
+            writer.addElement(
+                    GenericRow.of(Variant.fromJson("{\"age\":\"35\",\"city\":\"Chicago\"}")));
+        }
+
+        // List<InternalRow> result = new ArrayList<>();
+        // try (RecordReader<InternalRow> reader =
+        //          format.createReaderFactory(writeType)
+        //              .createReader(
+        //                  new FormatReaderContext(fileIO, file, fileIO.getFileSize(file)))) {
+        //     InternalRowSerializer serializer = new InternalRowSerializer(writeType);
+        //     reader.forEachRemaining(row -> result.add(serializer.copy(row)));
+        // }
+        //
+        // assertThat(result.get(0).getVariant(0).toJson())
+        //     .isEqualTo("{\"age\":35,\"city\":\"Chicago\"}");
     }
 }

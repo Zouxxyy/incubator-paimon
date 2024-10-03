@@ -70,6 +70,10 @@ public class SparkInternalRow extends org.apache.spark.sql.paimon.shims.Internal
 
     private InternalRow row;
 
+    public InternalRow row() {
+        return row;
+    }
+
     public SparkInternalRow(RowType rowType) {
         this.rowType = rowType;
     }

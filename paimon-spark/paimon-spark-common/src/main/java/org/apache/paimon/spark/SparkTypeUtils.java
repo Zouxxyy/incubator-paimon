@@ -42,6 +42,7 @@ import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
+import org.apache.paimon.types.VariantType;
 
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
@@ -101,7 +102,19 @@ public class SparkTypeUtils {
             List<DataField> newFields = new ArrayList<>();
             for (StructField field : s.fields()) {
                 DataField f = p.getField(field.name());
-                newFields.add(f.newType(prunePaimonType(field.dataType(), f.type())));
+                org.apache.paimon.types.DataType type = f.type();
+                if (type instanceof VariantType
+                        && field.metadata() != null
+                        && field.metadata().contains("requiredColumns")) {
+                    RowType.Builder builder = RowType.builder();
+                    for (String requiredSchema :
+                            field.metadata().getString("requiredColumns").split(",")) {
+                        builder.field(requiredSchema, org.apache.paimon.types.DataTypes.STRING());
+                    }
+                    ((VariantType) type).setRequiredSchema(builder.build());
+                    builder.build();
+                }
+                newFields.add(f.newType(prunePaimonType(field.dataType(), type)));
             }
             return p.copy(newFields);
         } else if (sparkDataType instanceof org.apache.spark.sql.types.MapType) {
@@ -211,6 +224,11 @@ public class SparkTypeUtils {
         @Override
         public DataType visit(LocalZonedTimestampType localZonedTimestampType) {
             return DataTypes.TimestampType;
+        }
+
+        @Override
+        public DataType visit(VariantType variantType) {
+            return DataTypes.VariantType;
         }
 
         @Override
@@ -377,6 +395,8 @@ public class SparkTypeUtils {
             } else if (atomic instanceof org.apache.spark.sql.types.TimestampNTZType) {
                 // Move TimestampNTZType to the end for compatibility with spark3.3 and below
                 return new TimestampType();
+            } else if (atomic instanceof org.apache.spark.sql.types.VariantType) {
+                return new VariantType();
             }
 
             throw new UnsupportedOperationException(

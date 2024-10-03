@@ -34,13 +34,14 @@ under the License.
     <name>Paimon : Spark : Common : ${scala.binary.version}</name>
 
     <properties>
-        <spark.version>${paimon-spark-common.spark.version}</spark.version>
+        <spark.version>4.0.0-preview2</spark.version>
+        <scala.binary.version>2.13</scala.binary.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.apache.paimon</groupId>
-            <artifactId>${paimon-sparkx-common}</artifactId>
+            <artifactId>paimon-spark4-common</artifactId>
             <version>${project.version}</version>
             <exclusions>
                 <exclusion>

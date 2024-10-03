@@ -25,8 +25,20 @@ import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.data.columnar.BytesColumnVector.Bytes;
+import org.apache.paimon.data.variant.PaimonShreddingUtils;
+import org.apache.paimon.data.variant.Variant;
+import org.apache.paimon.data.variant.VariantSchema;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataTypes;
+import org.apache.paimon.types.RowType;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.apache.paimon.data.variant.PaimonShreddingUtils.METADATA_FIELD_NAME;
+import static org.apache.paimon.data.variant.PaimonShreddingUtils.TYPED_VALUE_FIELD_NAME;
+import static org.apache.paimon.data.variant.PaimonShreddingUtils.VARIANT_VALUE_FIELD_NAME;
 
 /**
  * A VectorizedColumnBatch is a set of rows, organized with each column as a vector. It is the unit
@@ -48,8 +60,36 @@ public class VectorizedColumnBatch implements Serializable {
 
     public final ColumnVector[] columns;
 
+    public final VariantSchema[] variantsSchema;
+
     public VectorizedColumnBatch(ColumnVector[] vectors) {
         this.columns = vectors;
+        this.variantsSchema = null;
+    }
+
+    public VectorizedColumnBatch(ColumnVector[] vectors, RowType[] variantsSchema) {
+        this.columns = vectors;
+        VariantSchema[] vs = new VariantSchema[vectors.length];
+        for (int i = 0; i < vectors.length; i++) {
+            RowType rowType = variantsSchema[i];
+            if (rowType != null) {
+                boolean noNeedValue = false;
+                if (rowType.getFieldCount() == 1) {
+                    noNeedValue = true;
+                    List<DataField> fields = new ArrayList<>(3);
+                    fields.add(new DataField(0, METADATA_FIELD_NAME, DataTypes.BYTES()));
+                    fields.add(new DataField(1, VARIANT_VALUE_FIELD_NAME, DataTypes.BYTES()));
+                    fields.add(
+                            new DataField(2, TYPED_VALUE_FIELD_NAME, rowType.getField(2).type()));
+                    rowType = new RowType(fields);
+                }
+                vs[i] = PaimonShreddingUtils.buildVariantSchema(rowType);
+                if (noNeedValue) {
+                    vs[i].setTypedIdx(0);
+                }
+            }
+        }
+        this.variantsSchema = vs;
     }
 
     public void setNumRows(int numRows) {
@@ -130,6 +170,16 @@ public class VectorizedColumnBatch implements Serializable {
 
     public InternalRow getRow(int rowId, int colId) {
         return ((RowColumnVector) columns[colId]).getRow(rowId);
+    }
+
+    public Variant getVariant(int rowId, int colId) {
+        if (variantsSchema[colId] != null) {
+            return PaimonShreddingUtils.rebuild(getRow(rowId, colId), variantsSchema[colId]);
+        }
+        InternalRow row = getRow(rowId, colId);
+        byte[] value = row.getBinary(0);
+        byte[] metadata = row.getBinary(1);
+        return new Variant(value, metadata);
     }
 
     public InternalMap getMap(int rowId, int colId) {

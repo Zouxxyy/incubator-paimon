@@ -368,7 +368,6 @@ under the License.
                 <test.spark.version>3.3.0</test.spark.version>
             </properties>
             <activation>
-                <activeByDefault>true</activeByDefault>
                 <property>
                     <name>spark3</name>
                 </property>
@@ -392,6 +391,7 @@ under the License.
                 <test.spark.version>4.0.0-preview2</test.spark.version>
             </properties>
             <activation>
+                <activeByDefault>true</activeByDefault>
                 <property>
                     <name>spark4</name>
                 </property>

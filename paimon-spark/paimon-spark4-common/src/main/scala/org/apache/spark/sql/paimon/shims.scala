@@ -18,6 +18,8 @@
 
 package org.apache.spark.sql.paimon
 
+import org.apache.paimon.data.{InternalRow => PaimonInternalRow}
+
 import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow => SparkInternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
@@ -48,7 +50,12 @@ object shims {
   }
 
   abstract class InternalRow extends SparkInternalRow {
-    override def getVariant(i: Int): VariantVal = throw new UnsupportedOperationException
+    def row: PaimonInternalRow
+
+    override def getVariant(i: Int): VariantVal = {
+      val v = row.getVariant(i)
+      new VariantVal(v.getValue, v.getMetadata)
+    }
   }
 
   object Aggregate {

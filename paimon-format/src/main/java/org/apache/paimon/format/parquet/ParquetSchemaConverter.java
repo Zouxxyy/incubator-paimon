@@ -23,6 +23,7 @@ import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypeRoot;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.LocalZonedTimestampType;
@@ -30,6 +31,7 @@ import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.MultisetType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.types.VariantType;
 
 import org.apache.parquet.schema.ConversionPatterns;
 import org.apache.parquet.schema.GroupType;
@@ -170,6 +172,23 @@ public class ParquetSchemaConverter {
             case ROW:
                 RowType rowType = (RowType) type;
                 return new GroupType(repetition, name, convertToParquetTypes(rowType));
+            case VARIANT:
+                VariantType variantType = (VariantType) type;
+                if (variantType.writeShreddingSchema() != null) {
+                    return convertToParquetType(name, variantType.writeShreddingSchema());
+                }
+                return Types.buildGroup(repetition)
+                        .addField(
+                                Types.primitive(
+                                                PrimitiveType.PrimitiveTypeName.BINARY,
+                                                Type.Repetition.REQUIRED)
+                                        .named("value"))
+                        .addField(
+                                Types.primitive(
+                                                PrimitiveType.PrimitiveTypeName.BINARY,
+                                                Type.Repetition.REQUIRED)
+                                        .named("metadata"))
+                        .named(name);
             default:
                 throw new UnsupportedOperationException("Unsupported type: " + type);
         }
@@ -256,5 +275,30 @@ public class ParquetSchemaConverter {
 
     public static boolean is64BitDecimal(int precision) {
         return precision <= 18 && precision > 9;
+    }
+
+    public static DataType convertFromParquetType(Type parquetType) {
+        if (parquetType instanceof PrimitiveType) {
+            switch (parquetType.asPrimitiveType().getPrimitiveTypeName()) {
+                case BINARY:
+                    if (LogicalTypeAnnotation.stringType()
+                            .equals(parquetType.asPrimitiveType().getLogicalTypeAnnotation())) {
+                        return DataTypes.STRING();
+                    } else {
+                        return DataTypes.BYTES();
+                    }
+                default:
+                    throw new UnsupportedOperationException("Unsupported type: " + parquetType);
+            }
+        } else if (parquetType instanceof GroupType) {
+            GroupType groupType = parquetType.asGroupType();
+            RowType.Builder builder = RowType.builder();
+            for (Type field : groupType.getFields()) {
+                builder.field(field.getName(), convertFromParquetType(field));
+            }
+            return builder.build();
+        } else {
+            throw new UnsupportedOperationException("Unsupported type: " + parquetType);
+        }
     }
 }
