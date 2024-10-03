@@ -30,6 +30,7 @@ import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.data.serializer.InternalRowSerializer;
+import org.apache.paimon.data.variant.Variant;
 import org.apache.paimon.format.SimpleColStats;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.RowType;
@@ -194,6 +195,11 @@ public class SimpleStatsConverter {
 
         @Override
         public byte[] getBinary(int pos) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Variant getVariant(int pos) {
             throw new UnsupportedOperationException();
         }
 

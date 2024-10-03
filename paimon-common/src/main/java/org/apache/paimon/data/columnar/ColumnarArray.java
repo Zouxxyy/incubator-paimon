@@ -25,6 +25,7 @@ import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.data.variant.Variant;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -119,6 +120,14 @@ public final class ColumnarArray implements InternalArray, DataSetters, Serializ
             return Arrays.copyOfRange(
                     byteArray.data, byteArray.offset, byteArray.offset + byteArray.len);
         }
+    }
+
+    @Override
+    public Variant getVariant(int pos) {
+        InternalRow row = getRow(pos, 2);
+        byte[] value = row.getBinary(0);
+        byte[] metadata = row.getBinary(1);
+        return new Variant(value, metadata);
     }
 
     @Override

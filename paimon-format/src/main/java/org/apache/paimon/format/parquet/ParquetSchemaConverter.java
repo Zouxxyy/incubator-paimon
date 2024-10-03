@@ -168,6 +168,19 @@ public class ParquetSchemaConverter {
             case ROW:
                 RowType rowType = (RowType) type;
                 return new GroupType(repetition, name, convertToParquetTypes(rowType));
+            case VARIANT:
+                return Types.buildGroup(repetition)
+                        .addField(
+                                Types.primitive(
+                                                PrimitiveType.PrimitiveTypeName.BINARY,
+                                                Type.Repetition.REQUIRED)
+                                        .named("value"))
+                        .addField(
+                                Types.primitive(
+                                                PrimitiveType.PrimitiveTypeName.BINARY,
+                                                Type.Repetition.REQUIRED)
+                                        .named("metadata"))
+                        .named(name);
             default:
                 throw new UnsupportedOperationException("Unsupported type: " + type);
         }
