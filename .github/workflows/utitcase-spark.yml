@@ -53,8 +53,8 @@ jobs:
           . .github/workflows/utils.sh
           jvm_timezone=$(random_timezone)
           echo "JVM timezone is set to $jvm_timezone"
-          test_modules=""
-          for suffix in 3.5 3.4 3.3 3.2 common; do
+          test_modules="org.apache.paimon:paimon-format,"
+          for suffix in common 3.5 3.4 3.3 3.2; do
           test_modules+="org.apache.paimon:paimon-spark-${suffix},"
           done
           test_modules="${test_modules%,}"
