@@ -58,6 +58,6 @@ jobs:
           test_modules+="org.apache.paimon:paimon-spark-${suffix},"
           done
           test_modules="${test_modules%,}"
-          mvn -T 1C -B test -pl "${test_modules}" -Duser.timezone=$jvm_timezone -Pscala-2.13
+          mvn -T 1C -B clean install -pl "${test_modules}" -Duser.timezone=$jvm_timezone -Pscala-2.13
         env:
           MAVEN_OPTS: -Xmx4096m
