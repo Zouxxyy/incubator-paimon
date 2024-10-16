@@ -45,9 +45,7 @@ jobs:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'adopt'
       - name: Build Spark
-        run: |
-          # todo: support paimon-e2e-tests with Spark4 (Scala 2.13 and JDK 17)
-          mvn -T 1C -B clean install -DskipTests -Pspark4 -pl "!paimon-e2e-tests"
+        run:  mvn -T 1C -B clean install -DskipTests -Pspark4
       - name: Test Spark
         timeout-minutes: 60
         run: |
