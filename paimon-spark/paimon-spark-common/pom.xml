@@ -315,6 +315,7 @@ under the License.
                 </configuration>
             </plugin>
 
+            <!-- Used for submodules to utilize the test code -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
