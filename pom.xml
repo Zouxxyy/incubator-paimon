@@ -359,7 +359,7 @@ under the License.
                 <scala.version>${scala212.version}</scala.version>
                 <paimon-spark-common.spark.version>3.5.3</paimon-spark-common.spark.version>
                 <paimon-spark-x.x.common>paimon-spark-3.x-common</paimon-spark-x.x.common>
-                <test.spark.main.version>3.5</test.spark.main.version>
+                <test.spark.main.version>3.3</test.spark.main.version>
             </properties>
             <activation>
                 <activeByDefault>true</activeByDefault>
