@@ -412,6 +412,13 @@ public class SparkCatalog extends SparkBaseCatalog implements SupportFunction, S
         normalizedProperties.remove(PRIMARY_KEY_IDENTIFIER);
         normalizedProperties.remove(TableCatalog.PROP_COMMENT);
         String pkAsString = properties.get(PRIMARY_KEY_IDENTIFIER);
+        if (normalizedProperties.containsKey(TableCatalog.PROP_LOCATION)) {
+            normalizedProperties.put(
+                    CoreOptions.PATH.key(), normalizedProperties.get(TableCatalog.PROP_LOCATION));
+            normalizedProperties.remove(TableCatalog.PROP_LOCATION);
+            // As long as the table has location, treat it as external
+            normalizedProperties.put(Catalog.EXTERNAL_PROP, "true");
+        }
         List<String> primaryKeys =
                 pkAsString == null
                         ? Collections.emptyList()

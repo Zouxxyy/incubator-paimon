@@ -207,7 +207,7 @@ public class JdbcCatalog extends AbstractCatalog {
     }
 
     @Override
-    protected void dropTableImpl(Identifier identifier) {
+    protected void dropTableImpl(Identifier identifier, Map<String, String> options) {
         try {
             int deletedRecords =
                     execute(
