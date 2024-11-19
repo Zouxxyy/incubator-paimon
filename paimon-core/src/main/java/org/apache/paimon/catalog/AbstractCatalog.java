@@ -133,6 +133,10 @@ public abstract class AbstractCatalog implements Catalog {
         return catalogOptions.getOptional(ALLOW_UPPER_CASE).orElse(true);
     }
 
+    protected boolean externalTableEnabled() {
+        return false;
+    }
+
     @Override
     public void createDatabase(String name, boolean ignoreIfExists, Map<String, String> properties)
             throws DatabaseAlreadyExistException {
@@ -249,9 +253,9 @@ public abstract class AbstractCatalog implements Catalog {
             throws TableNotExistException {
         checkNotBranch(identifier, "dropTable");
         checkNotSystemTable(identifier, "dropTable");
-
+        Table table;
         try {
-            getTable(identifier);
+            table = getTable(identifier);
         } catch (TableNotExistException e) {
             if (ignoreIfNotExists) {
                 return;
@@ -259,10 +263,10 @@ public abstract class AbstractCatalog implements Catalog {
             throw new TableNotExistException(identifier);
         }
 
-        dropTableImpl(identifier);
+        dropTableImpl(identifier, table.options());
     }
 
-    protected abstract void dropTableImpl(Identifier identifier);
+    protected abstract void dropTableImpl(Identifier identifier, Map<String, String> options);
 
     @Override
     public void createTable(Identifier identifier, Schema schema, boolean ignoreIfExists)
@@ -272,6 +276,7 @@ public abstract class AbstractCatalog implements Catalog {
         validateIdentifierNameCaseInsensitive(identifier);
         validateFieldNameCaseInsensitive(schema.rowType().getFieldNames());
         validateAutoCreateClose(schema.options());
+        validateExternalTableSupport(schema.options());
 
         // check db exists
         getDatabase(identifier.getDatabaseName());
@@ -588,6 +593,16 @@ public abstract class AbstractCatalog implements Catalog {
                 String.format(
                         "The value of %s property should be %s.",
                         CoreOptions.AUTO_CREATE.key(), Boolean.FALSE));
+    }
+
+    private void validateExternalTableSupport(Map<String, String> options) {
+        if (options.getOrDefault(Catalog.EXTERNAL_PROP, "false").equals("true")
+                && (options.containsKey(CoreOptions.PATH.key()) && !externalTableEnabled())) {
+            throw new UnsupportedOperationException(
+                    String.format(
+                            "The current catalog %s does not support external tables, so specifying the path is not allowed when creating a table.",
+                            this.getClass().getSimpleName()));
+        }
     }
 
     // =============================== Meta in File System =====================================

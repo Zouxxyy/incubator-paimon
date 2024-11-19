@@ -57,6 +57,7 @@ public interface Catalog extends AutoCloseable {
 
     String COMMENT_PROP = "comment";
     String OWNER_PROP = "owner";
+    String EXTERNAL_PROP = "external";
     String DB_LOCATION_PROP = "location";
     String NUM_ROWS_PROP = "numRows";
     String NUM_FILES_PROP = "numFiles";

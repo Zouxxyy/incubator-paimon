@@ -105,7 +105,7 @@ public class FileSystemCatalog extends AbstractCatalog {
     }
 
     @Override
-    protected void dropTableImpl(Identifier identifier) {
+    protected void dropTableImpl(Identifier identifier, Map<String, String> options) {
         Path path = getTableLocation(identifier);
         uncheck(() -> fileIO.delete(path, true));
     }

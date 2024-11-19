@@ -414,8 +414,9 @@ public class SparkCatalog extends SparkBaseCatalog implements SupportFunction, S
         if (normalizedProperties.containsKey(TableCatalog.PROP_LOCATION)) {
             String path = normalizedProperties.remove(TableCatalog.PROP_LOCATION);
             normalizedProperties.put(CoreOptions.PATH.key(), path);
+            // For v2 table, as long as it has specified the location, treat it as external
+            normalizedProperties.put(Catalog.EXTERNAL_PROP, "true");
         }
-
         String pkAsString = properties.get(PRIMARY_KEY_IDENTIFIER);
         List<String> primaryKeys =
                 pkAsString == null
