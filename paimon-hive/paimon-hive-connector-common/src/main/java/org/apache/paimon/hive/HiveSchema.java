@@ -253,7 +253,7 @@ public class HiveSchema {
         List<String> mismatched = new ArrayList<>();
         for (int i = 0; i < hiveFieldNames.size(); i++) {
             if (!hiveFieldNames.get(i).equalsIgnoreCase(schemaFieldNames.get(i))
-                    || !Objects.equals(hiveFieldTypeInfos.get(i), schemaFieldTypeInfos.get(i))) {
+                    || !typeInfoMatched(hiveFieldTypeInfos.get(i), schemaFieldTypeInfos.get(i))) {
                 String ddlField =
                         hiveFieldNames.get(i) + " " + hiveFieldTypeInfos.get(i).getTypeName();
                 String schemaField =
@@ -272,6 +272,12 @@ public class HiveSchema {
                             + "Mismatched fields are:\n"
                             + String.join("--------------------\n", mismatched));
         }
+    }
+
+    private static boolean typeInfoMatched(TypeInfo l, TypeInfo r) {
+        return Objects.equals(l, r)
+                || (LocalZonedTimestampTypeUtils.isHiveCompatibleTimestampType(l)
+                        && LocalZonedTimestampTypeUtils.isHiveCompatibleTimestampType(r));
     }
 
     private static void checkPartitionMatched(
