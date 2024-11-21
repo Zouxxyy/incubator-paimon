@@ -253,7 +253,7 @@ public class HiveSchema {
         List<String> mismatched = new ArrayList<>();
         for (int i = 0; i < hiveFieldNames.size(); i++) {
             if (!hiveFieldNames.get(i).equalsIgnoreCase(schemaFieldNames.get(i))
-                    || !Objects.equals(hiveFieldTypeInfos.get(i), schemaFieldTypeInfos.get(i))) {
+                    || !typeInfoMatched(hiveFieldTypeInfos.get(i), schemaFieldTypeInfos.get(i))) {
                 String ddlField =
                         hiveFieldNames.get(i) + " " + hiveFieldTypeInfos.get(i).getTypeName();
                 String schemaField =
@@ -272,6 +272,17 @@ public class HiveSchema {
                             + "Mismatched fields are:\n"
                             + String.join("--------------------\n", mismatched));
         }
+    }
+
+    private static boolean typeInfoMatched(TypeInfo l, TypeInfo r) {
+        // Due to historical reasons, such as spark is bound to hive2 by default, but hive2 does not
+        // support timestamp_ltz, and the default timestamp of Spark is timestamp_ltz, so the engine
+        // may synchronize the wrong timestamp type to HMS. Therefore, the timestamp type check is
+        // relaxed here. Note: The actual hive query will be based on the paimon type to ensure the
+        // query is correct.
+        return Objects.equals(l, r)
+                || (LocalZonedTimestampTypeUtils.isHiveCompatibleTimestampType(l)
+                        && LocalZonedTimestampTypeUtils.isHiveCompatibleTimestampType(r));
     }
 
     private static void checkPartitionMatched(
