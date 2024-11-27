@@ -92,7 +92,7 @@ public abstract class HiveReadITCaseBase extends HiveTestBase {
         super.before();
         tablePath = String.format("%s/test_db.db/%s", path, TABLE_NAME);
         identifier = Identifier.create(DATABASE_NAME, TABLE_NAME);
-        externalTable = "test_table_" + UUID.randomUUID().toString().substring(0, 4);
+        externalTable = "test_table_" + UUID.randomUUID().toString().replace('-', '_');
         commitIdentifier = 0;
     }
 

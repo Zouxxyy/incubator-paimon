@@ -218,7 +218,7 @@ public class HiveWriteITCase extends HiveTestBase {
                         Collections.singletonList("pt"),
                         Arrays.asList("a", "pt"),
                         identifier);
-        String tableName = "test_table_" + (UUID.randomUUID().toString().substring(0, 4));
+        String tableName = "test_table_" + (UUID.randomUUID().toString().replace('-', '_'));
         hiveShell.execute(
                 String.join(
                         "\n",
@@ -262,7 +262,7 @@ public class HiveWriteITCase extends HiveTestBase {
                         Collections.singletonList("pt"),
                         Collections.emptyList(),
                         identifier);
-        String tableName = "test_table_" + (UUID.randomUUID().toString().substring(0, 4));
+        String tableName = "test_table_" + (UUID.randomUUID().toString().replace('-', '_'));
         hiveShell.execute(
                 String.join(
                         "\n",
