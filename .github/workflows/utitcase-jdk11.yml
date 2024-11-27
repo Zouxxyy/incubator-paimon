@@ -20,23 +20,20 @@ name: UTCase and ITCase Others on JDK 11
 
 on:
   # just for debug
+  push:
   pull_request:
-
-  issue_comment:
-    types: [created, edited, deleted]
-
-  # daily run
-  schedule:
-    - cron: "0 0 * * *"
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
 
 env:
   JDK_VERSION: 11
 
 jobs:
   build:
-    if: |
-      github.event_name == 'schedule' ||
-      (contains(github.event.comment.html_url, '/pull/') && contains(github.event.comment.body, '/jdk11'))
+#    if: |
+#      github.event_name == 'schedule' ||
+#      (contains(github.event.comment.html_url, '/pull/') && contains(github.event.comment.body, '/jdk11'))
     runs-on: ubuntu-latest
 
     steps:
