@@ -22,10 +22,9 @@ on:
   issue_comment:
     types: [created, edited, deleted]
 
-# debug
-#  # daily run
-#  schedule:
-#    - cron: "0 0 * * *"
+  # daily run
+  schedule:
+    - cron: "0 0 * * *"
 
 env:
   JDK_VERSION: 11
