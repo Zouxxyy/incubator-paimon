@@ -20,7 +20,7 @@ name: UTCase and ITCase Others on JDK 11
 
 on:
   # just for debug
-  push:
+  pull_request:
 
   issue_comment:
     types: [created, edited, deleted]
