@@ -103,7 +103,7 @@ The schema is:
 1. kind: ADD or DELETE,
 2. partition: partition spec, a BinaryRow.
 3. bucket: bucket of this file.
-4. indexFile: index file meta.
+4. file: index file meta.
 
 The index file meta is:
 
@@ -111,5 +111,10 @@ The index file meta is:
 2. fileName: file name.
 3. fileSize: file size.
 4. rowCount: total number of rows.
-5. deletionVectorsRanges: Metadata only used by "DELETION_VECTORS", Stores offset and length of each data file,
-   The schema is `ARRAY<ROW<f0: STRING, f1: INT, f2: INT>>`.
+5. deletionVectorMetas: Metadata only used by "DELETION_VECTORS", is an array of deletion vector meta, the schema of each deletion vector meta is:
+   1. fileName:
+   2. offset:
+   3. length:
+   4. cardinality:
+   5. first:
+   6. last:

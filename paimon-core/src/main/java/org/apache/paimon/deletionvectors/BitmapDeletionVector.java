@@ -82,6 +82,16 @@ public class BitmapDeletionVector implements DeletionVector {
     }
 
     @Override
+    public long first() {
+        return roaringBitmap.first();
+    }
+
+    @Override
+    public long last() {
+        return roaringBitmap.last();
+    }
+
+    @Override
     public byte[] serializeToBytes() {
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
                 DataOutputStream dos = new DataOutputStream(bos)) {
@@ -116,5 +126,10 @@ public class BitmapDeletionVector implements DeletionVector {
         }
         BitmapDeletionVector that = (BitmapDeletionVector) o;
         return Objects.equals(this.roaringBitmap, that.roaringBitmap);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(roaringBitmap);
     }
 }

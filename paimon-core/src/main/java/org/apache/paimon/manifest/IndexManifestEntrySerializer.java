@@ -18,27 +18,28 @@
 
 package org.apache.paimon.manifest;
 
-import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.index.IndexFileMeta;
+import org.apache.paimon.index.IndexFileMetaSerializer;
 import org.apache.paimon.utils.VersionedObjectSerializer;
 
-import static org.apache.paimon.index.IndexFileMetaSerializer.dvRangesToRowArrayData;
-import static org.apache.paimon.index.IndexFileMetaSerializer.rowArrayDataToDvRanges;
 import static org.apache.paimon.utils.SerializationUtils.deserializeBinaryRow;
 import static org.apache.paimon.utils.SerializationUtils.serializeBinaryRow;
 
 /** A {@link VersionedObjectSerializer} for {@link IndexManifestEntry}. */
 public class IndexManifestEntrySerializer extends VersionedObjectSerializer<IndexManifestEntry> {
 
+    private final IndexFileMetaSerializer indexFileMetaSerializer;
+
     public IndexManifestEntrySerializer() {
         super(IndexManifestEntry.SCHEMA);
+        this.indexFileMetaSerializer = new IndexFileMetaSerializer();
     }
 
     @Override
     public int getVersion() {
-        return 1;
+        return 2;
     }
 
     @Override
@@ -48,30 +49,21 @@ public class IndexManifestEntrySerializer extends VersionedObjectSerializer<Inde
                 record.kind().toByteValue(),
                 serializeBinaryRow(record.partition()),
                 record.bucket(),
-                BinaryString.fromString(indexFile.indexType()),
-                BinaryString.fromString(indexFile.fileName()),
-                indexFile.fileSize(),
-                indexFile.rowCount(),
-                record.indexFile().deletionVectorsRanges() == null
-                        ? null
-                        : dvRangesToRowArrayData(record.indexFile().deletionVectorsRanges()));
+                indexFileMetaSerializer.toRow(indexFile));
     }
 
     @Override
     public IndexManifestEntry convertFrom(int version, InternalRow row) {
-        if (version != 1) {
+        if (version != 2) {
             throw new UnsupportedOperationException("Unsupported version: " + version);
         }
 
+        // here ?!!!
         return new IndexManifestEntry(
                 FileKind.fromByteValue(row.getByte(0)),
                 deserializeBinaryRow(row.getBinary(1)),
                 row.getInt(2),
-                new IndexFileMeta(
-                        row.getString(3).toString(),
-                        row.getString(4).toString(),
-                        row.getLong(5),
-                        row.getLong(6),
-                        row.isNullAt(7) ? null : rowArrayDataToDvRanges(row.getArray(7))));
+                indexFileMetaSerializer.fromRow(
+                        row.getRow(3, indexFileMetaSerializer.numFields())));
     }
 }

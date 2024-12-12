@@ -23,20 +23,54 @@ import org.apache.paimon.data.GenericArray;
 import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalRow;
-import org.apache.paimon.utils.ObjectSerializer;
-import org.apache.paimon.utils.VersionedObjectSerializer;
+import org.apache.paimon.data.serializer.InternalRowSerializer;
+import org.apache.paimon.data.serializer.InternalSerializers;
+import org.apache.paimon.io.DataInputView;
+import org.apache.paimon.types.ArrayType;
+import org.apache.paimon.types.BigIntType;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.RowType;
 
+import java.io.IOException;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 
-/** A {@link VersionedObjectSerializer} for {@link IndexFileMeta}. */
-public class IndexFileMetaSerializer extends ObjectSerializer<IndexFileMeta> {
+import static org.apache.paimon.utils.SerializationUtils.newStringType;
 
-    public IndexFileMetaSerializer() {
-        super(IndexFileMeta.SCHEMA);
+/** Serializer for {@link IndexFileMeta} with 0.9 version. */
+public class IndexFileMeta09Serializer implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    public static final RowType SCHEMA =
+            new RowType(
+                    false,
+                    Arrays.asList(
+                            new DataField(0, "_INDEX_TYPE", newStringType(false)),
+                            new DataField(1, "_FILE_NAME", newStringType(false)),
+                            new DataField(2, "_FILE_SIZE", new BigIntType(false)),
+                            new DataField(3, "_ROW_COUNT", new BigIntType(false)),
+                            new DataField(
+                                    4,
+                                    "_DELETIONS_VECTORS_RANGES",
+                                    new ArrayType(
+                                            true,
+                                            RowType.of(
+                                                    newStringType(false),
+                                                    new IntType(false),
+                                                    new IntType(false))))));
+
+    protected final InternalRowSerializer rowSerializer;
+
+    public IndexFileMeta09Serializer() {
+        this.rowSerializer = InternalSerializers.create(SCHEMA);
     }
 
-    @Override
     public InternalRow toRow(IndexFileMeta record) {
         return GenericRow.of(
                 BinaryString.fromString(record.indexType()),
@@ -48,7 +82,6 @@ public class IndexFileMetaSerializer extends ObjectSerializer<IndexFileMeta> {
                         : dvMetasToRowArrayData(record.deletionVectorMetas().values()));
     }
 
-    @Override
     public IndexFileMeta fromRow(InternalRow row) {
         return new IndexFileMeta(
                 row.getString(0).toString(),
@@ -56,6 +89,19 @@ public class IndexFileMetaSerializer extends ObjectSerializer<IndexFileMeta> {
                 row.getLong(2),
                 row.getLong(3),
                 row.isNullAt(4) ? null : rowArrayDataToDvMetas(row.getArray(4)));
+    }
+
+    public final List<IndexFileMeta> deserializeList(DataInputView source) throws IOException {
+        int size = source.readInt();
+        List<IndexFileMeta> records = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            records.add(deserialize(source));
+        }
+        return records;
+    }
+
+    public IndexFileMeta deserialize(DataInputView in) throws IOException {
+        return fromRow(rowSerializer.deserialize(in));
     }
 
     public static InternalArray dvMetasToRowArrayData(Collection<DeletionVectorMeta> dvMetas) {
@@ -77,16 +123,16 @@ public class IndexFileMetaSerializer extends ObjectSerializer<IndexFileMeta> {
             InternalArray arrayData) {
         LinkedHashMap<String, DeletionVectorMeta> dvMetas = new LinkedHashMap<>(arrayData.size());
         for (int i = 0; i < arrayData.size(); i++) {
-            InternalRow row = arrayData.getRow(i, DeletionVectorMeta.SCHEMA.getFieldCount());
+            InternalRow row = arrayData.getRow(i, 3);
             dvMetas.put(
                     row.getString(0).toString(),
                     new DeletionVectorMeta(
                             row.getString(0).toString(),
                             row.getInt(1),
                             row.getInt(2),
-                            row.isNullAt(3) ? null : row.getLong(3),
-                            row.isNullAt(4) ? null : row.getLong(4),
-                            row.isNullAt(5) ? null : row.getLong(5)));
+                            null,
+                            null,
+                            null));
         }
         return dvMetas;
     }

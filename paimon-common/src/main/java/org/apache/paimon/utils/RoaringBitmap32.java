@@ -72,6 +72,10 @@ public class RoaringBitmap32 {
         return roaringBitmap.rangeCardinality(start, end);
     }
 
+    public int first() {
+        return roaringBitmap.first();
+    }
+
     public int last() {
         return roaringBitmap.last();
     }

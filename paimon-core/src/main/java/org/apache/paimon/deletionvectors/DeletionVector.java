@@ -85,6 +85,12 @@ public interface DeletionVector {
     /** @return the number of distinct integers added to the DeletionVector. */
     long getCardinality();
 
+    /** @return the first (smallest) position in this DeletionVector. */
+    long first();
+
+    /** @return the last (largest) position in this DeletionVector. */
+    long last();
+
     /**
      * Serializes the deletion vector to a byte array for storage or transmission.
      *

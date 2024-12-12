@@ -47,16 +47,28 @@ import java.util.Optional;
 @Public
 public class DeletionFile implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     private final String path;
     private final long offset;
     private final long length;
+    @Nullable private final Long cardinality;
+    @Nullable private final Long first;
+    @Nullable private final Long last;
 
-    public DeletionFile(String path, long offset, long length) {
+    public DeletionFile(
+            String path,
+            long offset,
+            long length,
+            @Nullable Long cardinality,
+            @Nullable Long first,
+            @Nullable Long last) {
         this.path = path;
         this.offset = offset;
         this.length = length;
+        this.cardinality = cardinality;
+        this.first = first;
+        this.last = last;
     }
 
     /** Path of the file. */
@@ -74,6 +86,21 @@ public class DeletionFile implements Serializable {
         return length;
     }
 
+    @Nullable
+    public Long cardinality() {
+        return cardinality;
+    }
+
+    @Nullable
+    public Long first() {
+        return first;
+    }
+
+    @Nullable
+    public Long last() {
+        return last;
+    }
+
     public static void serialize(DataOutputView out, @Nullable DeletionFile file)
             throws IOException {
         if (file == null) {
@@ -83,6 +110,9 @@ public class DeletionFile implements Serializable {
             out.writeUTF(file.path);
             out.writeLong(file.offset);
             out.writeLong(file.length);
+            out.writeLong(file.cardinality == null ? -1 : file.cardinality);
+            out.writeLong(file.first == null ? -1 : file.first);
+            out.writeLong(file.last == null ? -1 : file.last);
         }
     }
 
@@ -108,7 +138,16 @@ public class DeletionFile implements Serializable {
         String path = in.readUTF();
         long offset = in.readLong();
         long length = in.readLong();
-        return new DeletionFile(path, offset, length);
+        long cardinality = in.readLong();
+        long first = in.readLong();
+        long last = in.readLong();
+        return new DeletionFile(
+                path,
+                offset,
+                length,
+                cardinality == -1 ? null : cardinality,
+                first == -1 ? null : first,
+                last == -1 ? null : last);
     }
 
     @Nullable
@@ -126,22 +165,40 @@ public class DeletionFile implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof DeletionFile)) {
+        if (o == null || getClass() != o.getClass()) {
             return false;
         }
-
-        DeletionFile other = (DeletionFile) o;
-        return Objects.equals(path, other.path) && offset == other.offset && length == other.length;
+        DeletionFile that = (DeletionFile) o;
+        return offset == that.offset
+                && length == that.length
+                && Objects.equals(path, that.path)
+                && Objects.equals(cardinality, that.cardinality)
+                && Objects.equals(first, that.first)
+                && Objects.equals(last, that.last);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(path, offset, length);
+        return Objects.hash(path, offset, length, cardinality, first, last);
     }
 
     @Override
     public String toString() {
-        return String.format("{path = %s, offset = %d, length = %d}", path, offset, length);
+        return "DeletionFile{"
+                + "path='"
+                + path
+                + '\''
+                + ", offset="
+                + offset
+                + ", length="
+                + length
+                + ", cardinality="
+                + cardinality
+                + ", first="
+                + first
+                + ", last="
+                + last
+                + '}';
     }
 
     static Factory emptyFactory() {
