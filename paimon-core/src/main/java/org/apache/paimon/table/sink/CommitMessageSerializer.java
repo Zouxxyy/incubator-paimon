@@ -53,6 +53,7 @@ public class CommitMessageSerializer implements VersionedSerializer<CommitMessag
     private DataFileMeta08Serializer dataFile08Serializer;
 
     public CommitMessageSerializer() {
+        // ???
         this.dataFileSerializer = new DataFileMetaSerializer();
         this.indexEntrySerializer = new IndexFileMetaSerializer();
     }
@@ -107,6 +108,7 @@ public class CommitMessageSerializer implements VersionedSerializer<CommitMessag
     }
 
     private CommitMessage deserialize(int version, DataInputView view) throws IOException {
+        // here!! 添加修改
         if (version >= 3) {
             IOExceptionSupplier<List<DataFileMeta>> fileDeserializer =
                     () -> dataFileSerializer.deserializeList(view);

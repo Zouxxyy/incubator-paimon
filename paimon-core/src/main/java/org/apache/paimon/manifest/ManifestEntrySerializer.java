@@ -49,6 +49,7 @@ public class ManifestEntrySerializer extends VersionedObjectSerializer<ManifestE
 
     @Override
     public InternalRow convertTo(ManifestEntry entry) {
+        // here?
         GenericRow row = new GenericRow(5);
         row.setField(0, entry.kind().toByteValue());
         row.setField(1, serializeBinaryRow(entry.partition()));

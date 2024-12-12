@@ -49,6 +49,8 @@ import static org.apache.paimon.utils.SerializationUtils.serializeBinaryRow;
 /** Serializer for {@link DataFileMeta} with 0.9 version. */
 public class DataFileMeta09Serializer implements Serializable {
 
+    // ???
+
     private static final long serialVersionUID = 1L;
 
     public static final RowType SCHEMA =
