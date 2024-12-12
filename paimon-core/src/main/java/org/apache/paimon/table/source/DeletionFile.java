@@ -165,7 +165,9 @@ public class DeletionFile implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (o == null || getClass() != o.getClass()) return false;
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         DeletionFile that = (DeletionFile) o;
         return offset == that.offset
                 && length == that.length
