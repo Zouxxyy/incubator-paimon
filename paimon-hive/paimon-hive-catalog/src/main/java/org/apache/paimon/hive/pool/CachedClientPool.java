@@ -208,7 +208,7 @@ public class CachedClientPool implements ClientPool<IMetaStoreClient, TException
     public void close() throws IOException {
         if (clientPoolCache != null) {
             clientPoolCache.asMap().values().forEach(HiveClientPool::close);
-            clientPoolCache.cleanUp();
+            clientPoolCache.invalidateAll();
         }
     }
 
