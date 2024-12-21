@@ -637,6 +637,10 @@ public class HiveCatalog extends AbstractCatalog {
                                     identifier),
                             metastoreClientFactory(identifier).orElse(null)));
         } catch (TableNotExistException ignore) {
+            LOG.warn(
+                    "Table {} exists in HMS but not in the file system; dropping it from HMS.",
+                    identifier);
+            dropTableImpl(identifier);
         }
 
         if (formatTableDisabled()) {
