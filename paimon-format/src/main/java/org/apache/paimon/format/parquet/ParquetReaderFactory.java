@@ -28,6 +28,8 @@ import org.apache.paimon.data.columnar.RowColumnVector;
 import org.apache.paimon.data.columnar.VectorizedColumnBatch;
 import org.apache.paimon.data.columnar.VectorizedRowIterator;
 import org.apache.paimon.data.columnar.writable.WritableColumnVector;
+import org.apache.paimon.data.variant.PaimonShreddingUtils;
+import org.apache.paimon.data.variant.VariantSchema;
 import org.apache.paimon.format.FormatReaderFactory;
 import org.apache.paimon.format.parquet.newreader.VectorizedParquetRecordReader;
 import org.apache.paimon.format.parquet.reader.ColumnReader;
@@ -43,6 +45,7 @@ import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.types.VariantType;
 import org.apache.paimon.utils.Pair;
 import org.apache.paimon.utils.Pool;
 
@@ -118,6 +121,7 @@ public class ParquetReaderFactory implements FormatReaderFactory {
                         builder.build(),
                         context.selection());
         MessageType fileSchema = reader.getFileMetaData().getSchema();
+        setVariantShreddingSchemas(fileSchema);
         MessageType requestedSchema = clipParquetSchema(fileSchema);
         reader.setRequestedSchema(requestedSchema);
 
@@ -151,6 +155,7 @@ public class ParquetReaderFactory implements FormatReaderFactory {
                         builder.build(),
                         context.selection());
         MessageType fileSchema = reader.getFileMetaData().getSchema();
+        setVariantShreddingSchemas(fileSchema);
         MessageType requestedSchema = clipParquetSchema(fileSchema);
 
         if (LOG.isDebugEnabled()) {
@@ -168,7 +173,13 @@ public class ParquetReaderFactory implements FormatReaderFactory {
         List<ParquetField> fields = buildFieldsList(readFields, columnIO);
 
         return new VectorizedParquetRecordReader(
-                context.filePath(), reader, fileSchema, fields, writableVectors, batchSize);
+                context.filePath(),
+                reader,
+                fileSchema,
+                fields,
+                writableVectors,
+                batchSize,
+                readFields);
     }
 
     private void setReadOptions(ParquetReadOptions.Builder builder) {
@@ -282,6 +293,25 @@ public class ParquetReaderFactory implements FormatReaderFactory {
         }
     }
 
+    private void setVariantShreddingSchemas(GroupType fileSchema) {
+        for (int i = 0; i < readFields.length; i++) {
+            DataField field = readFields[i];
+            if (field.type() instanceof VariantType
+                    && fileSchema
+                            .getType(field.name())
+                            .asGroupType()
+                            .containsField(PaimonShreddingUtils.TYPED_VALUE_FIELD_NAME)) {
+                VariantType variantType = (VariantType) field.type().copy();
+                variantType.setShreddingSchema(
+                        (RowType)
+                                ParquetSchemaConverter.convertToPaimonField(
+                                                fileSchema.getType(field.name()))
+                                        .type());
+                readFields[i] = field.newType(variantType);
+            }
+        }
+    }
+
     private Pool<ParquetReaderBatch> createPoolOfBatches(
             Path filePath, MessageType requestedSchema) {
         // In a VectorizedColumnBatch, the dictionary will be lazied deserialized.
@@ -324,6 +354,7 @@ public class ParquetReaderFactory implements FormatReaderFactory {
     private VectorizedColumnBatch createVectorizedColumnBatch(
             WritableColumnVector[] writableVectors) {
         ColumnVector[] vectors = new ColumnVector[writableVectors.length];
+        VariantSchema[] variantSchemas = new VariantSchema[writableVectors.length];
         for (int i = 0; i < writableVectors.length; i++) {
             switch (readFields[i].type().getTypeRoot()) {
                 case DECIMAL:
@@ -333,12 +364,21 @@ public class ParquetReaderFactory implements FormatReaderFactory {
                 case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
                     vectors[i] = new ParquetTimestampVector(writableVectors[i]);
                     break;
+                case VARIANT:
+                    VariantType variantType = (VariantType) readFields[i].type();
+                    if (variantType.shreddingSchema() != null) {
+                        variantSchemas[i] =
+                                PaimonShreddingUtils.buildVariantSchema(
+                                        variantType.shreddingSchema());
+                    }
+                    vectors[i] = writableVectors[i];
+                    break;
                 default:
                     vectors[i] = writableVectors[i];
             }
         }
 
-        return new VectorizedColumnBatch(vectors);
+        return new VectorizedColumnBatch(vectors, variantSchemas);
     }
 
     private class ParquetReader implements FileRecordReader<InternalRow> {

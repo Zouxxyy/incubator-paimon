@@ -26,7 +26,11 @@ import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.data.columnar.BytesColumnVector.Bytes;
 import org.apache.paimon.data.variant.GenericVariant;
+import org.apache.paimon.data.variant.PaimonShreddingUtils;
 import org.apache.paimon.data.variant.Variant;
+import org.apache.paimon.data.variant.VariantSchema;
+
+import javax.annotation.Nullable;
 
 import java.io.Serializable;
 
@@ -44,8 +48,16 @@ public class VectorizedColumnBatch implements Serializable {
 
     public final ColumnVector[] columns;
 
+    @Nullable public VariantSchema[] variantSchemas;
+
     public VectorizedColumnBatch(ColumnVector[] vectors) {
         this.columns = vectors;
+        this.variantSchemas = null;
+    }
+
+    public VectorizedColumnBatch(ColumnVector[] vectors, VariantSchema[] variantSchemas) {
+        this.columns = vectors;
+        this.variantSchemas = variantSchemas;
     }
 
     public void setNumRows(int numRows) {
@@ -129,6 +141,9 @@ public class VectorizedColumnBatch implements Serializable {
     }
 
     public Variant getVariant(int rowId, int colId) {
+        if (variantSchemas != null && variantSchemas[colId] != null) {
+            return PaimonShreddingUtils.rebuild(getRow(rowId, colId), variantSchemas[colId]);
+        }
         InternalRow row = getRow(rowId, colId);
         byte[] value = row.getBinary(0);
         byte[] metadata = row.getBinary(1);
@@ -141,6 +156,7 @@ public class VectorizedColumnBatch implements Serializable {
 
     public VectorizedColumnBatch copy(ColumnVector[] vectors) {
         VectorizedColumnBatch vectorizedColumnBatch = new VectorizedColumnBatch(vectors);
+        vectorizedColumnBatch.variantSchemas = variantSchemas;
         vectorizedColumnBatch.setNumRows(numRows);
         return vectorizedColumnBatch;
     }

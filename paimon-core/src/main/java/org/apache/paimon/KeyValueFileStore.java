@@ -46,6 +46,7 @@ import org.apache.paimon.utils.FileStorePathFactory;
 import org.apache.paimon.utils.KeyComparatorSupplier;
 import org.apache.paimon.utils.UserDefinedSeqComparator;
 import org.apache.paimon.utils.ValueEqualiserSupplier;
+import org.apache.paimon.utils.VariantUtils;
 
 import java.util.Comparator;
 import java.util.HashMap;
@@ -184,6 +185,10 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
                     options,
                     tableName);
         } else {
+            RowType writeValueType =
+                    options.containsShreddingSchema()
+                            ? VariantUtils.setShreddingSchema(valueType, options)
+                            : valueType;
             return new KeyValueFileStoreWrite(
                     fileIO,
                     schemaManager,
@@ -191,9 +196,9 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
                     commitUser,
                     partitionType,
                     keyType,
-                    valueType,
+                    writeValueType,
                     keyComparatorSupplier,
-                    () -> UserDefinedSeqComparator.create(valueType, options),
+                    () -> UserDefinedSeqComparator.create(writeValueType, options),
                     logDedupEqualSupplier,
                     mfFactory,
                     pathFactory(),

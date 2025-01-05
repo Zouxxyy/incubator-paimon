@@ -35,6 +35,7 @@ import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.BucketMode;
 import org.apache.paimon.table.CatalogEnvironment;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.utils.VariantUtils;
 
 import java.util.Comparator;
 import java.util.List;
@@ -99,12 +100,16 @@ public class AppendOnlyFileStore extends AbstractFileStore<InternalRow> {
                 options.deletionVectorsEnabled()
                         ? DeletionVectorsMaintainer.factory(newIndexFileHandler())
                         : null;
+        RowType writeRowType =
+                options.containsShreddingSchema()
+                        ? VariantUtils.setShreddingSchema(rowType, options)
+                        : rowType;
         if (bucketMode() == BucketMode.BUCKET_UNAWARE) {
             return new AppendOnlyUnawareBucketFileStoreWrite(
                     fileIO,
                     newRead(),
                     schema.id(),
-                    rowType,
+                    writeRowType,
                     partitionType,
                     pathFactory(),
                     snapshotManager(),
@@ -118,7 +123,7 @@ public class AppendOnlyFileStore extends AbstractFileStore<InternalRow> {
                     newRead(),
                     schema.id(),
                     commitUser,
-                    rowType,
+                    writeRowType,
                     partitionType,
                     pathFactory(),
                     snapshotManager(),

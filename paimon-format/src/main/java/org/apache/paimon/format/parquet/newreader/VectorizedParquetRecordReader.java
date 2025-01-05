@@ -27,6 +27,8 @@ import org.apache.paimon.data.columnar.heap.HeapArrayVector;
 import org.apache.paimon.data.columnar.heap.HeapMapVector;
 import org.apache.paimon.data.columnar.heap.HeapRowVector;
 import org.apache.paimon.data.columnar.writable.WritableColumnVector;
+import org.apache.paimon.data.variant.PaimonShreddingUtils;
+import org.apache.paimon.data.variant.VariantSchema;
 import org.apache.paimon.format.parquet.reader.ParquetDecimalVector;
 import org.apache.paimon.format.parquet.reader.ParquetTimestampVector;
 import org.apache.paimon.format.parquet.type.ParquetField;
@@ -35,10 +37,13 @@ import org.apache.paimon.fs.Path;
 import org.apache.paimon.reader.FileRecordIterator;
 import org.apache.paimon.reader.FileRecordReader;
 import org.apache.paimon.types.ArrayType;
+import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.DataTypeRoot;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.MultisetType;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.types.VariantType;
 
 import org.apache.parquet.VersionParser;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -96,6 +101,7 @@ public class VectorizedParquetRecordReader implements FileRecordReader<InternalR
     private final MessageType fileSchema;
     private final List<ParquetField> fields;
     private final RowIndexGenerator rowIndexGenerator;
+    private final DataField[] readFields;
 
     private Set<ParquetField> missingColumns;
     private VersionParser.ParsedVersion writerVersion;
@@ -106,7 +112,8 @@ public class VectorizedParquetRecordReader implements FileRecordReader<InternalR
             MessageType fileSchema,
             List<ParquetField> fields,
             WritableColumnVector[] vectors,
-            int batchSize)
+            int batchSize,
+            DataField[] readFields)
             throws IOException {
         this.filePath = filePath;
         this.reader = reader;
@@ -115,6 +122,7 @@ public class VectorizedParquetRecordReader implements FileRecordReader<InternalR
         this.totalRowCount = reader.getFilteredRecordCount();
         this.batchSize = batchSize;
         this.rowIndexGenerator = new RowIndexGenerator();
+        this.readFields = readFields;
 
         // fetch writer version from file metadata
         try {
@@ -131,6 +139,16 @@ public class VectorizedParquetRecordReader implements FileRecordReader<InternalR
     }
 
     private void initBatch(WritableColumnVector[] vectors) {
+        VariantSchema[] variantSchemas = new VariantSchema[fields.size()];
+        for (int i = 0; i < readFields.length; i++) {
+            if (readFields[i].type().getTypeRoot().equals(DataTypeRoot.VARIANT)) {
+                VariantType variantType = (VariantType) readFields[i].type();
+                if (variantType.shreddingSchema() != null) {
+                    variantSchemas[i] =
+                            PaimonShreddingUtils.buildVariantSchema(variantType.shreddingSchema());
+                }
+            }
+        }
         columnarBatch =
                 new ColumnarBatch(
                         filePath,
@@ -138,7 +156,8 @@ public class VectorizedParquetRecordReader implements FileRecordReader<InternalR
                                 fields.stream()
                                         .map(ParquetField::getType)
                                         .collect(Collectors.toList()),
-                                vectors));
+                                vectors),
+                        variantSchemas);
         columnVectors = new ParquetColumnVector[fields.size()];
         for (int i = 0; i < columnVectors.length; i++) {
             columnVectors[i] =

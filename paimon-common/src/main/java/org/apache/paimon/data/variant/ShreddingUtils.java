@@ -153,10 +153,9 @@ public class ShreddingUtils {
                 int start = builder.getWritePos();
                 for (int fieldIdx = 0; fieldIdx < schema.objectSchema.length; ++fieldIdx) {
                     // Shredded field must not be null.
-                    // todo: add this check, when https://github.com/apache/paimon/issues/4785 fixed
-                    // if (object.isNullAt(fieldIdx)) {
-                    //     throw malformedVariant();
-                    // }
+                    if (object.isNullAt(fieldIdx)) {
+                        throw malformedVariant();
+                    }
                     String fieldName = schema.objectSchema[fieldIdx].fieldName;
                     VariantSchema fieldSchema = schema.objectSchema[fieldIdx].schema;
                     ShreddedRow fieldValue = object.getStruct(fieldIdx, fieldSchema.numFields);

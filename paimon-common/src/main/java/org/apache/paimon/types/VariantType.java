@@ -21,6 +21,8 @@ package org.apache.paimon.types;
 import org.apache.paimon.annotation.Public;
 import org.apache.paimon.data.variant.Variant;
 
+import javax.annotation.Nullable;
+
 /**
  * Data type of {@link Variant}.
  *
@@ -33,12 +35,22 @@ public class VariantType extends DataType {
 
     private static final String FORMAT = "VARIANT";
 
+    @Nullable private RowType shreddingSchema;
+
     public VariantType(boolean isNullable) {
         super(isNullable, DataTypeRoot.VARIANT);
     }
 
     public VariantType() {
         this(true);
+    }
+
+    public void setShreddingSchema(RowType shreddingSchema) {
+        this.shreddingSchema = shreddingSchema;
+    }
+
+    public RowType shreddingSchema() {
+        return shreddingSchema;
     }
 
     @Override
@@ -48,7 +60,9 @@ public class VariantType extends DataType {
 
     @Override
     public DataType copy(boolean isNullable) {
-        return new VariantType(isNullable);
+        VariantType variantType = new VariantType(isNullable);
+        variantType.shreddingSchema = this.shreddingSchema;
+        return variantType;
     }
 
     @Override
