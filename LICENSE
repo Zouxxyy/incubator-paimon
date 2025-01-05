@@ -273,6 +273,9 @@ from https://parquet.apache.org/ version 1.14.0
 paimon-common/src/main/java/org/apache/paimon/data/variant/GenericVariant.java
 paimon-common/src/main/java/org/apache/paimon/data/variant/GenericVariantBuilder.java
 paimon-common/src/main/java/org/apache/paimon/data/variant/GenericVariantUtil.java
+paimon-common/src/main/java/org/apache/paimon/data/variant/ShreddingUtils.java
+paimon-common/src/main/java/org/apache/paimon/data/variant/VariantSchema.java
+paimon-common/src/main/java/org/apache/paimon/data/variant/VariantShreddingWriter.java
 from https://spark.apache.org/ version 4.0.0-preview2
 
 MIT License
