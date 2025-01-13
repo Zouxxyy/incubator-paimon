@@ -37,6 +37,8 @@ public class VariantType extends DataType {
 
     @Nullable private RowType shreddingSchema;
 
+    @Nullable private RowType requiredSchema;
+
     public VariantType(boolean isNullable) {
         super(isNullable, DataTypeRoot.VARIANT);
     }
@@ -53,6 +55,14 @@ public class VariantType extends DataType {
         return shreddingSchema;
     }
 
+    public void setRequiredSchema(RowType requiredSchema) {
+        this.requiredSchema = requiredSchema;
+    }
+
+    public RowType requiredSchema() {
+        return requiredSchema;
+    }
+
     @Override
     public int defaultSize() {
         return 2048;
@@ -62,6 +72,7 @@ public class VariantType extends DataType {
     public DataType copy(boolean isNullable) {
         VariantType variantType = new VariantType(isNullable);
         variantType.shreddingSchema = this.shreddingSchema;
+        variantType.requiredSchema = this.requiredSchema;
         return variantType;
     }
 

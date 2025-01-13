@@ -43,6 +43,7 @@ import org.apache.paimon.reader.FileRecordReader;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.VariantType;
@@ -74,6 +75,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static org.apache.paimon.data.variant.PaimonShreddingUtils.METADATA_FIELD_NAME;
+import static org.apache.paimon.data.variant.PaimonShreddingUtils.TYPED_VALUE_FIELD_NAME;
+import static org.apache.paimon.data.variant.PaimonShreddingUtils.VARIANT_VALUE_FIELD_NAME;
 import static org.apache.paimon.format.parquet.ParquetSchemaConverter.MAP_REPEATED_NAME;
 import static org.apache.paimon.format.parquet.ParquetSchemaConverter.PAIMON_SCHEMA;
 import static org.apache.paimon.format.parquet.ParquetSchemaConverter.parquetListElementType;
@@ -98,6 +102,7 @@ public class ParquetReaderFactory implements FormatReaderFactory {
     private final int batchSize;
     private final FilterCompat.Filter filter;
     private final Set<Integer> unknownFieldsIndices = new HashSet<>();
+    private final boolean variantPruningEnabled;
 
     public ParquetReaderFactory(
             Options conf, RowType readType, int batchSize, FilterCompat.Filter filter) {
@@ -105,6 +110,9 @@ public class ParquetReaderFactory implements FormatReaderFactory {
         this.readFields = readType.getFields().toArray(new DataField[0]);
         this.batchSize = batchSize;
         this.filter = filter;
+        this.variantPruningEnabled =
+                conf.get("variant.pruning.enabled") == null
+                        || Boolean.parseBoolean(conf.get("variant.pruning.enabled"));
     }
 
     // TODO: remove this when new reader is stable
@@ -259,6 +267,14 @@ public class ParquetReaderFactory implements FormatReaderFactory {
                         arrayGroup.getName(),
                         clipParquetType(
                                 arrayType.getElementType(), parquetListElementType(arrayGroup)));
+            case VARIANT:
+                VariantType v = (VariantType) readType;
+                if (v.shreddingSchema() != null && variantPruningEnabled) {
+                    RowType shreddedSchema = v.shreddingSchema();
+                    return clipParquetType(shreddedSchema, parquetType);
+                } else {
+                    return parquetType;
+                }
             default:
                 return parquetType;
         }
@@ -300,13 +316,19 @@ public class ParquetReaderFactory implements FormatReaderFactory {
                     && fileSchema
                             .getType(field.name())
                             .asGroupType()
-                            .containsField(PaimonShreddingUtils.TYPED_VALUE_FIELD_NAME)) {
+                            .containsField(TYPED_VALUE_FIELD_NAME)) {
                 VariantType variantType = (VariantType) field.type().copy();
-                variantType.setShreddingSchema(
+                RowType shreddingSchema =
                         (RowType)
                                 ParquetSchemaConverter.convertToPaimonField(
                                                 fileSchema.getType(field.name()))
-                                        .type());
+                                        .type();
+                if (variantPruningEnabled) {
+                    shreddingSchema =
+                            PaimonShreddingUtils.pruneShreddingSchema(
+                                    shreddingSchema, variantType.requiredSchema());
+                }
+                variantType.setShreddingSchema(shreddingSchema);
                 readFields[i] = field.newType(variantType);
             }
         }
@@ -367,9 +389,26 @@ public class ParquetReaderFactory implements FormatReaderFactory {
                 case VARIANT:
                     VariantType variantType = (VariantType) readFields[i].type();
                     if (variantType.shreddingSchema() != null) {
+                        RowType shreddingSchema = variantType.shreddingSchema();
+                        boolean noNeedValue = false;
+                        if (shreddingSchema.getFieldCount() == 1) {
+                            noNeedValue = true;
+                            List<DataField> fields = new ArrayList<>(3);
+                            fields.add(new DataField(0, METADATA_FIELD_NAME, DataTypes.BYTES()));
+                            fields.add(
+                                    new DataField(1, VARIANT_VALUE_FIELD_NAME, DataTypes.BYTES()));
+                            fields.add(
+                                    new DataField(
+                                            2,
+                                            TYPED_VALUE_FIELD_NAME,
+                                            shreddingSchema.getField(2).type()));
+                            shreddingSchema = new RowType(fields);
+                        }
                         variantSchemas[i] =
-                                PaimonShreddingUtils.buildVariantSchema(
-                                        variantType.shreddingSchema());
+                                PaimonShreddingUtils.buildVariantSchema(shreddingSchema);
+                        if (noNeedValue) {
+                            variantSchemas[i].setTypedIdx(0);
+                        }
                     }
                     vectors[i] = writableVectors[i];
                     break;

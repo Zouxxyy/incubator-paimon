@@ -168,4 +168,51 @@ abstract class VariantTestBase extends PaimonSparkTestBase {
       Seq(Row("Beijing"), Row(null), Row(null))
     )
   }
+
+  test("Paimon Variant: read shredded with pruning") {
+    sql(
+      """
+        |CREATE TABLE T (id INT, v VARIANT)
+        |TBLPROPERTIES ('fields.v.shredding-schema' = '{"type":"ROW","fields":[{"name":"age","type":"INT"}]}')
+        |""".stripMargin)
+
+    val values =
+      """
+        | SELECT
+        | id,
+        | CASE
+        | WHEN id = 0 THEN parse_json('{"age":27,"city":"Beijing"}')
+        | WHEN id = 1 THEN parse_json('{"age":27}')
+        | WHEN id = 2 THEN parse_json('{"city":"Beijing", "other":"xxx"}')
+        | WHEN id = 3 THEN parse_json('{"other":"yyy"}')
+        | WHEN id = 4 THEN parse_json('{"age":"27"}')
+        | WHEN id = 5 THEN parse_json('{}')
+        | WHEN id = 6 THEN parse_json('"zzz"')
+        | END v FROM range(7)
+        |""".stripMargin
+
+    sql(s"INSERT INTO T $values")
+
+    // 1. required fields full shredding
+    sql("SELECT variant_get(v, '$.age', 'int') FROM T").show()
+    withSparkSQLConf("spark.paimon.variant.pruning.enabled" -> "false") {
+      sql("SELECT variant_get(v, '$.age', 'int') FROM T").show()
+    }
+
+    // 2. required fields part shredding
+    sql(
+      "SELECT variant_get(v, '$.city', 'string') FROM T where variant_get(v, '$.age', 'int') = 27")
+      .show()
+    withSparkSQLConf("spark.paimon.variant.pruning.enabled" -> "false") {
+      sql(
+        "SELECT variant_get(v, '$.city', 'string') FROM T where variant_get(v, '$.age', 'int') = 27")
+        .show()
+    }
+
+    // 3. required fields no shredding
+    sql("SELECT variant_get(v, '$.city', 'string') FROM T").show()
+    withSparkSQLConf("spark.paimon.variant.pruning.enabled" -> "false") {
+      sql("SELECT variant_get(v, '$.city', 'string') FROM T").show()
+    }
+  }
 }

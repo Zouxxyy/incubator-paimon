@@ -107,7 +107,19 @@ public class SparkTypeUtils {
             List<DataField> newFields = new ArrayList<>();
             for (StructField field : s.fields()) {
                 DataField f = p.getField(field.name());
-                newFields.add(f.newType(prunePaimonType(field.dataType(), f.type())));
+                org.apache.paimon.types.DataType type = f.type();
+                if (type instanceof VariantType
+                        && field.metadata() != null
+                        && field.metadata().contains("requiredColumns")) {
+                    RowType.Builder builder = RowType.builder();
+                    for (String requiredSchema :
+                            field.metadata().getString("requiredColumns").split(",")) {
+                        builder.field(requiredSchema, org.apache.paimon.types.DataTypes.STRING());
+                    }
+                    ((VariantType) type).setRequiredSchema(builder.build());
+                    builder.build();
+                }
+                newFields.add(f.newType(prunePaimonType(field.dataType(), type)));
             }
             return p.copy(newFields);
         } else if (sparkDataType instanceof org.apache.spark.sql.types.MapType) {

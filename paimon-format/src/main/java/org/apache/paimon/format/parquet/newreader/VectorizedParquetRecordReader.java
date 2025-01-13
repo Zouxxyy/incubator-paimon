@@ -40,6 +40,7 @@ import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypeRoot;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.MultisetType;
 import org.apache.paimon.types.RowType;
@@ -56,6 +57,7 @@ import org.apache.parquet.schema.Type;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -64,6 +66,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
+import static org.apache.paimon.data.variant.PaimonShreddingUtils.METADATA_FIELD_NAME;
+import static org.apache.paimon.data.variant.PaimonShreddingUtils.TYPED_VALUE_FIELD_NAME;
+import static org.apache.paimon.data.variant.PaimonShreddingUtils.VARIANT_VALUE_FIELD_NAME;
 
 /* This file is based on source code from the Spark Project (http://spark.apache.org/), licensed by the Apache
  * Software Foundation (ASF) under the Apache License, Version 2.0. See the NOTICE file distributed with this work for
@@ -144,8 +149,24 @@ public class VectorizedParquetRecordReader implements FileRecordReader<InternalR
             if (readFields[i].type().getTypeRoot().equals(DataTypeRoot.VARIANT)) {
                 VariantType variantType = (VariantType) readFields[i].type();
                 if (variantType.shreddingSchema() != null) {
-                    variantSchemas[i] =
-                            PaimonShreddingUtils.buildVariantSchema(variantType.shreddingSchema());
+                    RowType shreddingSchema = variantType.shreddingSchema();
+                    boolean noNeedValue = false;
+                    if (shreddingSchema.getFieldCount() == 1) {
+                        noNeedValue = true;
+                        List<DataField> fields = new ArrayList<>(3);
+                        fields.add(new DataField(0, METADATA_FIELD_NAME, DataTypes.BYTES()));
+                        fields.add(new DataField(1, VARIANT_VALUE_FIELD_NAME, DataTypes.BYTES()));
+                        fields.add(
+                                new DataField(
+                                        2,
+                                        TYPED_VALUE_FIELD_NAME,
+                                        shreddingSchema.getField(2).type()));
+                        shreddingSchema = new RowType(fields);
+                    }
+                    variantSchemas[i] = PaimonShreddingUtils.buildVariantSchema(shreddingSchema);
+                    if (noNeedValue) {
+                        variantSchemas[i].setTypedIdx(0);
+                    }
                 }
             }
         }

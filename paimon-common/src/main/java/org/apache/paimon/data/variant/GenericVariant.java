@@ -57,6 +57,8 @@ import static org.apache.paimon.data.variant.GenericVariantUtil.variantConstruct
 /** An internal data structure implementing {@link Variant}. */
 public final class GenericVariant implements Variant {
 
+    public static final GenericVariant EMPTY = GenericVariant.fromJson("{}");
+
     private final byte[] value;
     private final byte[] metadata;
     // The variant value doesn't use the whole `value` binary, but starts from its `pos` index and

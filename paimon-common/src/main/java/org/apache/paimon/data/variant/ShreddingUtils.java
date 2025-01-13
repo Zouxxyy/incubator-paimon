@@ -69,13 +69,20 @@ public class ShreddingUtils {
     // implementation will be called on any recursively shredded sub-schema.
     public static Variant rebuild(ShreddedRow row, VariantSchema schema) {
         if (schema.topLevelMetadataIdx < 0 || row.isNullAt(schema.topLevelMetadataIdx)) {
-            throw malformedVariant();
+            // throw malformedVariant();
+            return GenericVariant.EMPTY;
         }
-        byte[] metadata = row.getBinary(schema.topLevelMetadataIdx);
+        byte[] metadata;
+        if (schema.getMetadata() != null) {
+            metadata = schema.getMetadata();
+        } else {
+            metadata = row.getBinary(schema.topLevelMetadataIdx);
+        }
         if (schema.isUnshredded()) {
             // `rebuild` is unnecessary for unshredded variant.
             if (row.isNullAt(schema.variantIdx)) {
-                throw malformedVariant();
+                // throw malformedVariant();
+                return GenericVariant.EMPTY;
             }
             return new GenericVariant(row.getBinary(schema.variantIdx), metadata);
         }
@@ -153,9 +160,10 @@ public class ShreddingUtils {
                 int start = builder.getWritePos();
                 for (int fieldIdx = 0; fieldIdx < schema.objectSchema.length; ++fieldIdx) {
                     // Shredded field must not be null.
-                    if (object.isNullAt(fieldIdx)) {
-                        throw malformedVariant();
-                    }
+                    // note: for old reader, remove exception
+                    // if (object.isNullAt(fieldIdx)) {
+                    //     throw malformedVariant();
+                    // }
                     String fieldName = schema.objectSchema[fieldIdx].fieldName;
                     VariantSchema fieldSchema = schema.objectSchema[fieldIdx].schema;
                     ShreddedRow fieldValue = object.getStruct(fieldIdx, fieldSchema.numFields);
@@ -195,9 +203,11 @@ public class ShreddingUtils {
             // `typed_value` doesn't exist or is null. Read from `value`.
             builder.appendVariant(new GenericVariant(row.getBinary(variantIdx), metadata));
         } else {
+            // note: for old reader remove exception
+            builder.finishWritingObject(builder.getWritePos(), new ArrayList<>());
             // This means the variant is missing in a context where it must present, so the input
             // data is invalid.
-            throw malformedVariant();
+            // throw malformedVariant();
         }
     }
 }

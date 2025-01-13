@@ -34,6 +34,8 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.VarBinaryType;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -420,5 +422,33 @@ public class PaimonShreddingUtils {
 
     public static Variant rebuild(InternalRow row, VariantSchema variantSchema) {
         return ShreddingUtils.rebuild(new PaimonShreddedRow(row), variantSchema);
+    }
+
+    public static RowType pruneShreddingSchema(RowType shreddingSchema, RowType requiredSchema) {
+        if (requiredSchema == null) {
+            return shreddingSchema;
+        }
+
+        List<DataField> newFields = new ArrayList<>();
+        HashSet<String> requiredFieldNames = new HashSet<>(requiredSchema.getFieldNames());
+        boolean notContains = false;
+        DataField typedValue = shreddingSchema.getField(TYPED_VALUE_FIELD_NAME);
+        RowType typedValueFields = (RowType) typedValue.type();
+        List<DataField> newTypedValueFields = new ArrayList<>();
+        for (String requiredFieldName : requiredFieldNames) {
+            if (typedValueFields.containsField(requiredFieldName)) {
+                newTypedValueFields.add(typedValueFields.getField(requiredFieldName));
+            } else {
+                notContains = true;
+            }
+        }
+        if (notContains) {
+            newFields.add(shreddingSchema.getField(METADATA_FIELD_NAME));
+            newFields.add(shreddingSchema.getField(VARIANT_VALUE_FIELD_NAME));
+        }
+        if (!newTypedValueFields.isEmpty()) {
+            newFields.add(typedValue.newType(new RowType(newTypedValueFields)));
+        }
+        return new RowType(newFields);
     }
 }
