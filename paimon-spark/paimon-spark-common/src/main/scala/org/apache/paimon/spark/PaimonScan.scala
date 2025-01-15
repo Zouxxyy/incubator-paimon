@@ -156,6 +156,7 @@ case class PaimonScan(
       .map(fieldReference)
   }
 
+  // todo: replace it with SupportsRuntimeV2Filtering
   override def filter(filters: Array[Filter]): Unit = {
     val converter = new SparkFilterConverter(table.rowType())
     val partitionFilter = filters.flatMap {
@@ -170,5 +171,4 @@ case class PaimonScan(
       inputPartitions = null
     }
   }
-
 }

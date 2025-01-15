@@ -20,9 +20,11 @@ package org.apache.paimon.spark
 
 import org.apache.paimon.data.{BinaryString, Decimal, Timestamp}
 import org.apache.paimon.predicate.{Predicate, PredicateBuilder}
+import org.apache.paimon.spark.util.shim.TypeUtils.treatPaimonTimestampTypeAsSparkTimestampType
 import org.apache.paimon.types.{DataTypeRoot, DecimalType, RowType}
 import org.apache.paimon.types.DataTypeRoot._
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.{Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.filter.{And, Not, Or, Predicate => SparkPredicate}
 
@@ -34,6 +36,15 @@ case class SparkV2FilterConverter(rowType: RowType) {
   import org.apache.paimon.spark.SparkV2FilterConverter._
 
   val builder = new PredicateBuilder(rowType)
+
+  def convert(sparkPredicate: SparkPredicate, ignoreFailure: Boolean): Option[Predicate] = {
+    try {
+      Some(convert(sparkPredicate))
+    } catch {
+      case _ if ignoreFailure => None
+      case e: Exception => throw e
+    }
+  }
 
   def convert(sparkPredicate: SparkPredicate): Predicate = {
     sparkPredicate.name() match {
@@ -205,8 +216,14 @@ case class SparkV2FilterConverter(rowType: RowType) {
           value.asInstanceOf[org.apache.spark.sql.types.Decimal].toJavaBigDecimal,
           precision,
           scale)
-      case DataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE | DataTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE =>
+      case DataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE =>
         Timestamp.fromMicros(value.asInstanceOf[Long])
+      case DataTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE =>
+        if (treatPaimonTimestampTypeAsSparkTimestampType()) {
+          Timestamp.fromSQLTimestamp(DateTimeUtils.toJavaTimestamp(value.asInstanceOf[Long]))
+        } else {
+          Timestamp.fromMicros(value.asInstanceOf[Long])
+        }
       case _ =>
         throw new UnsupportedOperationException(
           s"Convert value: $value to datatype: $dataType is unsupported.")
