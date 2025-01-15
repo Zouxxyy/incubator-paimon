@@ -16,8 +16,6 @@
  * limitations under the License.
  */
 
-package org.apache.paimon.spark
+package org.apache.paimon.spark.sql
 
-import org.apache.paimon.table.Table
-
-case class PaimonScanBuilder(table: Table) extends PaimonBaseScanBuilder(table) {}
+class PaimonPushDownTest extends PaimonPushDownTestBase {}

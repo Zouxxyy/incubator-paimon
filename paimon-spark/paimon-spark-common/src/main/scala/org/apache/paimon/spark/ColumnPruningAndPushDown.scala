@@ -26,10 +26,10 @@ import org.apache.paimon.types.RowType
 import org.apache.paimon.utils.Preconditions.checkState
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.types.StructType
 
-trait ColumnPruningAndPushDown extends Scan with Logging {
+trait ColumnPruningAndPushDown extends SupportsRuntimeV2FilteringShim with Logging {
+
   def table: Table
   def requiredSchema: StructType
   def filters: Seq[Predicate]

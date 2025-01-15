@@ -96,9 +96,9 @@ case class SparkTable(table: Table)
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     table match {
       case t: KnownSplitsTable =>
-        new PaimonSplitScanBuilder(t)
+        PaimonSplitScanBuilder(t)
       case _ =>
-        new PaimonScanBuilder(table.copy(options.asCaseSensitiveMap))
+        PaimonScanBuilder(table.copy(options.asCaseSensitiveMap))
     }
   }
 

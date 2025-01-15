@@ -32,7 +32,7 @@ import java.util.{Optional, OptionalLong}
 
 import scala.collection.JavaConverters._
 
-case class PaimonStatistics[T <: PaimonBaseScan](scan: T) extends Statistics {
+case class PaimonStatistics[T <: PaimonScan](scan: T) extends Statistics {
 
   private lazy val rowCount: Long = scan.lazyInputPartitions.map(_.rowCount()).sum
 

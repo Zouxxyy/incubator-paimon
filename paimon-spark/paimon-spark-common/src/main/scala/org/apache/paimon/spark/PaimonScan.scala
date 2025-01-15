@@ -18,16 +18,24 @@
 
 package org.apache.paimon.spark
 
+import org.apache.paimon.{stats, CoreOptions}
+import org.apache.paimon.annotation.VisibleForTesting
 import org.apache.paimon.predicate.Predicate
-import org.apache.paimon.table.{BucketMode, FileStoreTable, Table}
-import org.apache.paimon.table.source.{DataSplit, Split}
+import org.apache.paimon.spark.metric.SparkMetricRegistry
+import org.apache.paimon.spark.sources.PaimonMicroBatchStream
+import org.apache.paimon.spark.statistics.StatisticsHelper
+import org.apache.paimon.table.{BucketMode, DataTable, FileStoreTable, Table}
+import org.apache.paimon.table.source.{DataSplit, InnerTableScan, Split}
 
-import org.apache.spark.sql.PaimonUtils.fieldReference
-import org.apache.spark.sql.connector.expressions.{Expressions, NamedReference, SortDirection, SortOrder, Transform}
-import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning, SupportsRuntimeFiltering}
+import org.apache.spark.sql.connector.expressions.{Expressions, Transform}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.sources.{Filter, In}
+import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
+
+import java.util.Optional
 
 import scala.collection.JavaConverters._
 
@@ -37,14 +45,94 @@ case class PaimonScan(
     filters: Seq[Predicate],
     reservedFilters: Seq[Filter],
     override val pushDownLimit: Option[Int],
-    bucketedScanDisabled: Boolean = false)
-  extends PaimonBaseScan(table, requiredSchema, filters, reservedFilters, pushDownLimit)
-  with SupportsRuntimeFiltering
+    bucketedScanEnabled: Boolean = true)
+  extends Scan
+  with SupportsReportStatistics
+  with ScanHelper
+  with ColumnPruningAndPushDown
+  with StatisticsHelper
   with SupportsReportPartitioning
-  with SupportsReportOrdering {
+  with SupportsRuntimeV2FilteringShim
+  with SupportsReportOrderingShim {
 
-  def disableBucketedScan(): PaimonScan = {
-    copy(bucketedScanDisabled = true)
+  override val coreOptions: CoreOptions = CoreOptions.fromMap(table.options())
+
+  lazy val statistics: Optional[stats.Statistics] = table.statistics()
+
+  private lazy val paimonMetricsRegistry: SparkMetricRegistry = SparkMetricRegistry()
+
+  lazy val requiredStatsSchema: StructType = {
+    val fieldNames =
+      readTableRowType.getFields.asScala.map(_.name) ++ reservedFilters.flatMap(_.references)
+    StructType(tableSchema.filter(field => fieldNames.contains(field.name)))
+  }
+
+  @VisibleForTesting
+  def getOriginSplits: Array[Split] = {
+    readBuilder
+      .newScan()
+      .asInstanceOf[InnerTableScan]
+      .withMetricsRegistry(paimonMetricsRegistry)
+      .plan()
+      .splits()
+      .asScala
+      .toArray
+  }
+
+  final def lazyInputPartitions: Seq[PaimonInputPartition] = {
+    if (inputPartitions == null) {
+      inputPartitions = getInputPartitions(getOriginSplits)
+    }
+    inputPartitions
+  }
+
+  override def toBatch: Batch = {
+    PaimonBatch(lazyInputPartitions, readBuilder, metadataColumns)
+  }
+
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+    new PaimonMicroBatchStream(table.asInstanceOf[DataTable], readBuilder, checkpointLocation)
+  }
+
+  override def estimateStatistics(): Statistics = {
+    val stats = PaimonStatistics(this)
+    // When using paimon stats, we need to perform additional FilterEstimation with reservedFilters on stats.
+    if (stats.paimonStatsEnabled && reservedFilters.nonEmpty) {
+      filterStatistics(stats, reservedFilters)
+    } else {
+      stats
+    }
+  }
+
+  override def supportedCustomMetrics: Array[CustomMetric] = {
+    val paimonMetrics: Array[CustomMetric] = table match {
+      case _: FileStoreTable =>
+        Array(
+          PaimonNumSplitMetric(),
+          PaimonSplitSizeMetric(),
+          PaimonAvgSplitSizeMetric(),
+          PaimonPlanningDurationMetric(),
+          PaimonScannedManifestsMetric(),
+          PaimonSkippedTableFilesMetric(),
+          PaimonResultedTableFilesMetric()
+        )
+      case _ =>
+        Array.empty[CustomMetric]
+    }
+    super.supportedCustomMetrics() ++ paimonMetrics
+  }
+
+  override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+    table match {
+      case _: FileStoreTable =>
+        paimonMetricsRegistry.buildSparkScanMetrics()
+      case _ =>
+        Array.empty[CustomTaskMetric]
+    }
+  }
+
+  def shouldDoBucketedScan: Boolean = {
+    bucketedScanEnabled && conf.v2BucketingEnabled && extractBucketTransform.isDefined
   }
 
   @transient
@@ -73,8 +161,8 @@ case class PaimonScan(
     }
   }
 
-  private def shouldDoBucketedScan: Boolean = {
-    !bucketedScanDisabled && conf.v2BucketingEnabled && extractBucketTransform.isDefined
+  def disableBucketedScan(): PaimonScan = {
+    copy(bucketedScanEnabled = false)
   }
 
   // Since Spark 3.3
@@ -82,52 +170,6 @@ case class PaimonScan(
     extractBucketTransform
       .map(bucket => new KeyGroupedPartitioning(Array(bucket), lazyInputPartitions.size))
       .getOrElse(new UnknownPartitioning(0))
-  }
-
-  // Since Spark 3.4
-  override def outputOrdering(): Array[SortOrder] = {
-    if (
-      !shouldDoBucketedScan || lazyInputPartitions.exists(
-        !_.isInstanceOf[PaimonBucketedInputPartition])
-    ) {
-      return Array.empty
-    }
-
-    val primaryKeys = table match {
-      case fileStoreTable: FileStoreTable => fileStoreTable.primaryKeys().asScala
-      case _ => Seq.empty
-    }
-    if (primaryKeys.isEmpty) {
-      return Array.empty
-    }
-
-    val allSplitsKeepOrdering = lazyInputPartitions.toSeq
-      .map(_.asInstanceOf[PaimonBucketedInputPartition])
-      .map(_.splits.asInstanceOf[Seq[DataSplit]])
-      .forall {
-        splits =>
-          // Only support report ordering if all matches:
-          // - one `Split` per InputPartition (TODO: Re-construct splits using minKey/maxKey)
-          // - `Split` is not rawConvertible so that the merge read can happen
-          // - `Split` only contains one data file so it always sorted even without merge read
-          splits.size < 2 && splits.forall {
-            split => !split.rawConvertible() || split.dataFiles().size() < 2
-          }
-      }
-    if (!allSplitsKeepOrdering) {
-      return Array.empty
-    }
-
-    // Multi-primary keys are fine:
-    // `Array(a, b)` satisfies the required ordering `Array(a)`
-    primaryKeys
-      .map(Expressions.identity)
-      .map {
-        sortExpr =>
-          // Primary key can not be null, the null ordering is no matter.
-          Expressions.sort(sortExpr, SortDirection.ASCENDING)
-      }
-      .toArray
   }
 
   override def getInputPartitions(splits: Array[Split]): Seq[PaimonInputPartition] = {
@@ -145,30 +187,13 @@ case class PaimonScan(
       .toSeq
   }
 
-  // Since Spark 3.2
-  override def filterAttributes(): Array[NamedReference] = {
-    val requiredFields = readBuilder.readType().getFieldNames.asScala
-    table
-      .partitionKeys()
-      .asScala
-      .toArray
-      .filter(requiredFields.contains)
-      .map(fieldReference)
-  }
-
-  override def filter(filters: Array[Filter]): Unit = {
-    val converter = new SparkFilterConverter(table.rowType())
-    val partitionFilter = filters.flatMap {
-      case in @ In(attr, _) if table.partitionKeys().contains(attr) =>
-        Some(converter.convert(in))
-      case _ => None
+  override def description(): String = {
+    val pushedFiltersStr = if (filters.nonEmpty) {
+      ", PushedFilters: [" + filters.mkString(",") + "]"
+    } else {
+      ""
     }
-    if (partitionFilter.nonEmpty) {
-      this.runtimeFilters = filters
-      readBuilder.withFilter(partitionFilter.head)
-      // set inputPartitions null to trigger to get the new splits.
-      inputPartitions = null
-    }
+    s"PaimonScan: [${table.name}]" + pushedFiltersStr +
+      pushDownLimit.map(limit => s", Limit: [$limit]").getOrElse("")
   }
-
 }

@@ -18,26 +18,21 @@
 
 package org.apache.paimon.spark
 
-import org.apache.paimon.predicate.Predicate
 import org.apache.paimon.table.Table
+import org.apache.paimon.table.source.ReadBuilder
 
 import org.apache.spark.sql.PaimonUtils.fieldReference
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
 import org.apache.spark.sql.sources.{Filter, In}
-import org.apache.spark.sql.types.StructType
 
 import scala.collection.JavaConverters._
 
-case class PaimonScan(
-    table: Table,
-    requiredSchema: StructType,
-    filters: Seq[Predicate],
-    reservedFilters: Seq[Filter],
-    override val pushDownLimit: Option[Int],
-    disableBucketedScan: Boolean = false)
-  extends PaimonBaseScan(table, requiredSchema, filters, reservedFilters, pushDownLimit)
-  with SupportsRuntimeFiltering {
+trait SupportsRuntimeV2FilteringShim extends SupportsRuntimeFiltering {
+
+  def readBuilder: ReadBuilder
+  def table: Table
+  protected var inputPartitions: Seq[PaimonInputPartition] = _
 
   override def filterAttributes(): Array[NamedReference] = {
     val requiredFields = readBuilder.readType().getFieldNames.asScala
@@ -57,11 +52,9 @@ case class PaimonScan(
       case _ => None
     }
     if (partitionFilter.nonEmpty) {
-      this.runtimeFilters = filters
       readBuilder.withFilter(partitionFilter.head)
       // set inputPartitions null to trigger to get the new splits.
       inputPartitions = null
     }
   }
-
 }

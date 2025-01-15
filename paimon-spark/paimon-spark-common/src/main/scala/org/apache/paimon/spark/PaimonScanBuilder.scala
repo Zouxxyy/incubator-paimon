@@ -18,20 +18,25 @@
 
 package org.apache.paimon.spark
 
-import org.apache.paimon.predicate.PredicateBuilder
+import org.apache.paimon.predicate.{PartitionPredicateVisitor, Predicate, PredicateBuilder}
 import org.apache.paimon.spark.aggregate.LocalAggregator
 import org.apache.paimon.table.Table
 import org.apache.paimon.table.source.DataSplit
 
+import org.apache.spark.sql.PaimonUtils
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates, SupportsPushDownLimit}
+import org.apache.spark.sql.connector.expressions.filter.{Predicate => SparkPredicate}
+import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownV2Filters}
+import org.apache.spark.sql.sources.Filter
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-class PaimonScanBuilder(table: Table)
+case class PaimonScanBuilder(table: Table)
   extends PaimonBaseScanBuilder(table)
   with SupportsPushDownLimit
   with SupportsPushDownAggregates {
+
   private var localScan: Option[Scan] = None
 
   override def pushLimit(limit: Int): Boolean = {
@@ -52,8 +57,8 @@ class PaimonScanBuilder(table: Table)
       return true
     }
 
-    // Only support with push down partition filter
-    if (postScanFilters.nonEmpty) {
+    // Only support when there is no post scan predicates.
+    if (hasPostScanPredicates) {
       return false
     }
 
@@ -63,8 +68,8 @@ class PaimonScanBuilder(table: Table)
     }
 
     val readBuilder = table.newReadBuilder
-    if (pushedPredicates.nonEmpty) {
-      val pushedPartitionPredicate = PredicateBuilder.and(pushedPredicates.map(_._2): _*)
+    if (pushedPaimonPredicates.nonEmpty) {
+      val pushedPartitionPredicate = PredicateBuilder.and(pushedPaimonPredicates.toList.asJava)
       readBuilder.withFilter(pushedPartitionPredicate)
     }
     val dataSplits = readBuilder.newScan().plan().splits().asScala.map(_.asInstanceOf[DataSplit])
@@ -77,7 +82,7 @@ class PaimonScanBuilder(table: Table)
         aggregator.result(),
         aggregator.resultSchema(),
         table,
-        pushedPredicates.map(_._1)))
+        pushedPaimonPredicates))
     true
   }
 
