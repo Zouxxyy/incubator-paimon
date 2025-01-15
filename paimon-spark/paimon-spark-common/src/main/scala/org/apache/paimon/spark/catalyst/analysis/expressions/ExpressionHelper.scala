@@ -168,6 +168,7 @@ trait ExpressionHelper extends PredicateHelper {
       output: Seq[Attribute],
       rowType: RowType,
       ignorePartialFailure: Boolean = false): Option[Predicate] = {
+    // todo: replace it with SparkV2FilterConverter when we drop Spark3.2
     val converter = new SparkFilterConverter(rowType)
     val filters = normalizeExprs(Seq(condition), output)
       .flatMap(splitConjunctivePredicates(_).flatMap {
