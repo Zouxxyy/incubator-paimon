@@ -159,7 +159,7 @@ case class PaimonScan(
 
   override def filter(predicates: Array[SparkPredicate]): Unit = {
     val converter = SparkV2FilterConverter(table.rowType())
-    val partitionKeys = table.partitionKeys().asScala
+    val partitionKeys = table.partitionKeys().asScala.toSeq
     val partitionFilter: Array[Predicate] = predicates.flatMap {
       case p if SparkV2FilterConverter.isSupportedRuntimeFilter(p, partitionKeys) =>
         converter.convert(p, ignoreFailure = true)
