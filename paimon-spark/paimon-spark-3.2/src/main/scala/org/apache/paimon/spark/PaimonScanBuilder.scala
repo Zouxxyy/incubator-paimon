@@ -20,4 +20,4 @@ package org.apache.paimon.spark
 
 import org.apache.paimon.table.Table
 
-case class PaimonScanBuilder(table: Table) extends PaimonBaseScanBuilder(table) {}
+case class PaimonScanBuilder(table: Table) extends PaimonBaseScanBuilder(table)
