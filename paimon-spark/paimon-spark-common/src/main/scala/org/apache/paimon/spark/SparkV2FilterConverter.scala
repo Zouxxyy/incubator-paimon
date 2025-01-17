@@ -158,36 +158,6 @@ case class SparkV2FilterConverter(rowType: RowType) {
     }
   }
 
-  private object UnaryPredicate {
-    def unapply(sparkPredicate: SparkPredicate): Option[String] = {
-      sparkPredicate.children() match {
-        case Array(n: NamedReference) => Some(toFieldName(n))
-        case _ => None
-      }
-    }
-  }
-
-  private object BinaryPredicate {
-    def unapply(sparkPredicate: SparkPredicate): Option[(String, Any)] = {
-      sparkPredicate.children() match {
-        case Array(l: NamedReference, r: Literal[_]) => Some((toFieldName(l), r.value))
-        case Array(l: Literal[_], r: NamedReference) => Some((toFieldName(r), l.value))
-        case _ => None
-      }
-    }
-  }
-
-  private object MultiPredicate {
-    def unapply(sparkPredicate: SparkPredicate): Option[(String, Array[Any])] = {
-      sparkPredicate.children() match {
-        case Array(first: NamedReference, rest @ _*)
-            if rest.nonEmpty && rest.forall(_.isInstanceOf[Literal[_]]) =>
-          Some(toFieldName(first), rest.map(_.asInstanceOf[Literal[_]].value).toArray)
-        case _ => None
-      }
-    }
-  }
-
   private def fieldIndex(fieldName: String): Int = {
     val index = rowType.getFieldIndex(fieldName)
     // TODO: support nested field
@@ -229,8 +199,6 @@ case class SparkV2FilterConverter(rowType: RowType) {
           s"Convert value: $value to datatype: $dataType is unsupported.")
     }
   }
-
-  private def toFieldName(ref: NamedReference): String = ref.fieldNames().mkString(".")
 }
 
 object SparkV2FilterConverter {
@@ -250,4 +218,48 @@ object SparkV2FilterConverter {
   private val STRING_START_WITH = "STARTS_WITH"
   private val STRING_END_WITH = "ENDS_WITH"
   private val STRING_CONTAINS = "CONTAINS"
+
+  private object UnaryPredicate {
+    def unapply(sparkPredicate: SparkPredicate): Option[String] = {
+      sparkPredicate.children() match {
+        case Array(n: NamedReference) => Some(toFieldName(n))
+        case _ => None
+      }
+    }
+  }
+
+  private object BinaryPredicate {
+    def unapply(sparkPredicate: SparkPredicate): Option[(String, Any)] = {
+      sparkPredicate.children() match {
+        case Array(l: NamedReference, r: Literal[_]) => Some((toFieldName(l), r.value))
+        case Array(l: Literal[_], r: NamedReference) => Some((toFieldName(r), l.value))
+        case _ => None
+      }
+    }
+  }
+
+  private object MultiPredicate {
+    def unapply(sparkPredicate: SparkPredicate): Option[(String, Array[Any])] = {
+      sparkPredicate.children() match {
+        case Array(first: NamedReference, rest @ _*)
+            if rest.nonEmpty && rest.forall(_.isInstanceOf[Literal[_]]) =>
+          Some(toFieldName(first), rest.map(_.asInstanceOf[Literal[_]].value).toArray)
+        case _ => None
+      }
+    }
+  }
+
+  private def toFieldName(ref: NamedReference): String = ref.fieldNames().mkString(".")
+
+  def isSupportedRuntimeFilter(
+      sparkPredicate: SparkPredicate,
+      partitionKeys: Seq[String]): Boolean = {
+    sparkPredicate.name() match {
+      case IN =>
+        MultiPredicate.unapply(sparkPredicate) match {
+          case Some((fieldName, _)) => partitionKeys.contains(fieldName)
+        }
+      case _ => false
+    }
+  }
 }
