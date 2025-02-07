@@ -18,6 +18,9 @@
 
 package org.apache.paimon.data.variant;
 
+import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.DataTypes;
+
 import org.apache.paimon.shade.jackson2.com.fasterxml.jackson.core.JsonFactory;
 import org.apache.paimon.shade.jackson2.com.fasterxml.jackson.core.JsonGenerator;
 
@@ -33,7 +36,9 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 
 import static org.apache.paimon.data.variant.GenericVariantUtil.BINARY_SEARCH_THRESHOLD;
@@ -493,5 +498,42 @@ public final class GenericVariant implements Variant {
                                 .encodeToString(GenericVariantUtil.getBinary(value, pos)));
                 break;
         }
+    }
+
+    public Map<String, DataType> getObjectKeyValueType() {
+        Map<String, DataType> res = new HashMap<>();
+        if (Objects.requireNonNull(GenericVariantUtil.getType(value, pos)) == Type.OBJECT) {
+            handleObject(
+                    value,
+                    pos,
+                    (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+                        for (int i = 0; i < size; ++i) {
+                            int id = readUnsigned(value, idStart + idSize * i, idSize);
+                            int offset =
+                                    readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+                            int elementPos = dataStart + offset;
+                            String metadataKey = getMetadataKey(metadata, id);
+                            Type type = GenericVariantUtil.getType(value, elementPos);
+                            switch (type) {
+                                case BOOLEAN:
+                                    res.put(metadataKey, DataTypes.BOOLEAN());
+                                    break;
+                                case LONG:
+                                    res.put(metadataKey, DataTypes.BIGINT());
+                                    break;
+                                case STRING:
+                                    res.put(metadataKey, DataTypes.STRING());
+                                    break;
+                                case DOUBLE:
+                                    res.put(metadataKey, DataTypes.DOUBLE());
+                                    break;
+                                case DECIMAL:
+                                default:
+                            }
+                        }
+                        return null;
+                    });
+        }
+        return res;
     }
 }

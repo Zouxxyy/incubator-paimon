@@ -215,4 +215,61 @@ abstract class VariantTestBase extends PaimonSparkTestBase {
       sql("SELECT variant_get(v, '$.city', 'string') FROM T").show()
     }
   }
+
+  test("Paimon Variant: shredding sampling") {
+    sql("""
+          |CREATE TABLE T (id INT, v VARIANT)
+          |TBLPROPERTIES (
+          |'variant-shredding.sample.enabled' = 'true',
+          |'variant-shredding.sample.size' = '10',
+          |'variant-shredding.sample.ratio' = '0.1',
+          |'variant-shredding.sample.max-columns' = '2'
+          |)
+          |""".stripMargin)
+
+    val values =
+      """
+        | SELECT
+        | /*+ REPARTITION(1) */
+        | id,
+        | CASE
+        | WHEN id = 0 THEN parse_json('{"age":27,"city":"Beijing"}')
+        | WHEN id = 1 THEN parse_json('{"age":27}')
+        | WHEN id = 2 THEN parse_json('{"city":"Beijing", "other":"xxx"}')
+        | WHEN id = 3 THEN parse_json('{"other":"yyy"}')
+        | WHEN id = 4 THEN parse_json('{"age":"27"}')
+        | WHEN id = 5 THEN parse_json('"zzz"')
+        | WHEN id = 6 THEN parse_json('{}')
+        | WHEN id = 7 THEN parse_json('{}')
+        | WHEN id = 8 THEN parse_json('{}')
+        | WHEN id = 9 THEN parse_json('{"age1":"27"}')
+        | END v FROM range(10)
+        |""".stripMargin
+
+    sql(s"INSERT INTO T $values")
+
+    // todo: fix int and bigint
+    // checkAnswer(sql("SELECT * FROM T ORDER BY id"), sql(values))
+
+    checkAnswer(
+      sql("SELECT variant_get(v, '$.age', 'int') FROM T ORDER BY id"),
+      Seq(
+        Row(27),
+        Row(27),
+        Row(null),
+        Row(null),
+        Row(27),
+        Row(null),
+        Row(null),
+        Row(null),
+        Row(null),
+        Row(null))
+    )
+
+    checkAnswer(
+      sql(
+        "SELECT variant_get(v, '$.city', 'string') FROM T where variant_get(v, '$.age', 'int') = 27 ORDER BY id"),
+      Seq(Row("Beijing"), Row(null), Row(null))
+    )
+  }
 }

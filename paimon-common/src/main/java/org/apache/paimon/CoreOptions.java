@@ -1610,6 +1610,30 @@ public class CoreOptions implements Serializable {
                             "Set a time duration when a partition has no new data after this time duration, "
                                     + "start to report the partition statistics to hms.");
 
+    public static final ConfigOption<Boolean> VARIANT_SHREDDING_SAMPLE_ENABLED =
+            key("variant-shredding.sample.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("1.");
+
+    public static final ConfigOption<Integer> VARIANT_SHREDDING_SAMPLE_SIZE =
+            key("variant-shredding.sample.size")
+                    .intType()
+                    .defaultValue(10000)
+                    .withDescription("1.");
+
+    public static final ConfigOption<Double> VARIANT_SHREDDING_SAMPLE_RATIO =
+            key("variant-shredding.sample.ratio")
+                    .doubleType()
+                    .defaultValue(0.1)
+                    .withDescription("1.");
+
+    public static final ConfigOption<Integer> VARIANT_SHREDDING_SAMPLE_MAX_COLUMNS =
+            key("variant-shredding.sample.max-columns")
+                    .intType()
+                    .defaultValue(150)
+                    .withDescription("1.");
+
     @ExcludeFromDocumentation("Only used internally to support materialized table")
     public static final ConfigOption<String> MATERIALIZED_TABLE_DEFINITION_QUERY =
             key("materialized-table.definition-query")
@@ -2633,6 +2657,22 @@ public class CoreOptions implements Serializable {
 
     public boolean dataFileThinMode() {
         return options.get(DATA_FILE_THIN_MODE);
+    }
+
+    public boolean variantShreddingSampleEnabled() {
+        return options.get(VARIANT_SHREDDING_SAMPLE_ENABLED);
+    }
+
+    public int variantShreddingSampleSize() {
+        return options.get(VARIANT_SHREDDING_SAMPLE_SIZE);
+    }
+
+    public double variantShreddingSampleRatio() {
+        return options.get(VARIANT_SHREDDING_SAMPLE_RATIO);
+    }
+
+    public int variantShreddingSampleMaxColumns() {
+        return options.get(VARIANT_SHREDDING_SAMPLE_MAX_COLUMNS);
     }
 
     /** Specifies the merge engine for table with primary key. */

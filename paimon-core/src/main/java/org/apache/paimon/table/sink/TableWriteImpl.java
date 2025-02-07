@@ -86,6 +86,10 @@ public class TableWriteImpl<T> implements InnerTableWrite, Restorable<List<State
         this.notNullFieldIndex = rowType.getFieldIndices(notNullColumnNames);
     }
 
+    public void resetWriteType(RowType rowType) {
+        this.write.resetWriteRowType(rowType);
+    }
+
     @Override
     public TableWriteImpl<T> withIgnorePreviousFiles(boolean ignorePreviousFiles) {
         write.withIgnorePreviousFiles(ignorePreviousFiles);

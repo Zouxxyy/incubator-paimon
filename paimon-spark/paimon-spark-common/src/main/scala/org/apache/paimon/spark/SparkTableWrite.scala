@@ -20,7 +20,7 @@ package org.apache.paimon.spark
 
 import org.apache.paimon.disk.IOManager
 import org.apache.paimon.spark.util.SparkRowUtils
-import org.apache.paimon.table.sink.{BatchTableWrite, BatchWriteBuilder, CommitMessageImpl, CommitMessageSerializer}
+import org.apache.paimon.table.sink.{BatchTableWrite, BatchWriteBuilder, CommitMessageImpl, CommitMessageSerializer, TableWriteImpl}
 import org.apache.paimon.types.RowType
 
 import org.apache.spark.TaskContext
@@ -78,5 +78,9 @@ class SparkTableWrite(writeBuilder: BatchWriteBuilder, rowType: RowType, rowKind
         bytesWritten,
         recordsWritten)
     }
+  }
+
+  def resetWriteType(rowType: RowType): Unit = {
+    write.asInstanceOf[TableWriteImpl[_]].resetWriteType(rowType)
   }
 }

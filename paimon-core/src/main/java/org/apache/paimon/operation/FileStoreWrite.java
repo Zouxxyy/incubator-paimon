@@ -29,6 +29,7 @@ import org.apache.paimon.memory.MemorySegmentPool;
 import org.apache.paimon.metrics.MetricRegistry;
 import org.apache.paimon.table.sink.CommitMessage;
 import org.apache.paimon.table.sink.SinkRecord;
+import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.CommitIncrement;
 import org.apache.paimon.utils.RecordWriter;
 import org.apache.paimon.utils.Restorable;
@@ -47,6 +48,10 @@ import java.util.concurrent.ExecutorService;
  * @param <T> type of record to write.
  */
 public interface FileStoreWrite<T> extends Restorable<List<FileStoreWrite.State<T>>> {
+
+    default void resetWriteRowType(RowType rowType) {
+        throw new UnsupportedOperationException();
+    }
 
     FileStoreWrite<T> withIOManager(IOManager ioManager);
 

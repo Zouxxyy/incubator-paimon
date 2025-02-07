@@ -30,7 +30,7 @@ import org.apache.paimon.io.{CompactIncrement, DataIncrement, IndexIncrement}
 import org.apache.paimon.manifest.{FileKind, IndexManifestEntry}
 import org.apache.paimon.spark.{SparkRow, SparkTableWrite, SparkTypeUtils}
 import org.apache.paimon.spark.schema.SparkSystemColumns.{BUCKET_COL, ROW_KIND_COL}
-import org.apache.paimon.spark.util.SparkRowUtils
+import org.apache.paimon.spark.util.{ShreddingUtils, SparkRowUtils}
 import org.apache.paimon.table.BucketMode._
 import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.table.sink._
@@ -38,6 +38,7 @@ import org.apache.paimon.types.{RowKind, RowType}
 import org.apache.paimon.utils.{InternalRowPartitionComputer, PartitionPathUtils, PartitionStatisticsReporter, SerializationUtils}
 
 import org.apache.spark.{Partitioner, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
@@ -61,6 +62,11 @@ case class PaimonSparkWriter(table: FileStoreTable) {
   @transient private lazy val serializer = new CommitMessageSerializer
 
   val writeBuilder: BatchWriteBuilder = table.newBatchWriteBuilder()
+
+  private lazy val coreOptions = table.coreOptions()
+
+  private lazy val shreddingSampleCols =
+    ShreddingUtils.shreddingSampleColIds(rowType, coreOptions)
 
   def writeOnly(): PaimonSparkWriter = {
     PaimonSparkWriter(table.copy(singletonMap(WRITE_ONLY.key(), "true")))
@@ -95,7 +101,23 @@ case class PaimonSparkWriter(table: FileStoreTable) {
           {
             val write = newWrite()
             try {
-              iter.foreach(row => write.write(row))
+              if (shreddingSampleCols.nonEmpty) {
+                val startTS = System.currentTimeMillis()
+                var buffer = iter.take(coreOptions.variantShreddingSampleSize()).toList
+                val shreddingSchemas = ShreddingUtils.getShreddingSchemasBySampling(
+                  buffer,
+                  coreOptions.variantShreddingSampleRatio(),
+                  coreOptions.variantShreddingSampleMaxColumns(),
+                  shreddingSampleCols)
+                val newIter = buffer.iterator ++ iter
+                buffer = Nil
+                write.resetWriteType(ShreddingUtils.setShreddingSchemas(rowType, shreddingSchemas))
+                val duration = System.currentTimeMillis() - startTS
+                log.info(s"Sample shredding schema cost in $duration ms")
+                newIter.foreach(row => write.write(row))
+              } else {
+                iter.foreach(row => write.write(row))
+              }
               write.finish()
             } finally {
               write.close()

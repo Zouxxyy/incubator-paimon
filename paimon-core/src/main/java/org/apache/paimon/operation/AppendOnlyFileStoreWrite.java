@@ -67,7 +67,7 @@ public abstract class AppendOnlyFileStoreWrite extends MemoryFileStoreWrite<Inte
     private final FileIO fileIO;
     private final RawFileSplitRead read;
     private final long schemaId;
-    private final RowType rowType;
+    private RowType rowType;
     private final FileFormat fileFormat;
     private final FileStorePathFactory pathFactory;
 
@@ -98,6 +98,11 @@ public abstract class AppendOnlyFileStoreWrite extends MemoryFileStoreWrite<Inte
         this.statsCollectors =
                 StatsCollectorFactories.createStatsFactories(options, rowType.getFieldNames());
         this.fileIndexOptions = options.indexColumnsOptions();
+    }
+
+    @Override
+    public void resetWriteRowType(RowType rowType) {
+        this.rowType = rowType;
     }
 
     @Override
