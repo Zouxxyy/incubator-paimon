@@ -44,13 +44,24 @@ public interface ClientPool<C, E extends Exception> {
     /** Default implementation for {@link ClientPool}. */
     abstract class ClientPoolImpl<C, E extends Exception> implements Closeable, ClientPool<C, E> {
 
+        private static final int CONNECTION_RETRY_WAIT_PERIOD_MS = 1000;
+
         private volatile LinkedBlockingDeque<C> clients;
+        private final boolean retry;
+        private final int maxRetries;
 
         protected ClientPoolImpl(int poolSize, Supplier<C> supplier) {
+            this(poolSize, supplier, true, 1);
+        }
+
+        protected ClientPoolImpl(
+                int poolSize, Supplier<C> supplier, boolean retry, int maxRetries) {
             this.clients = new LinkedBlockingDeque<>();
             for (int i = 0; i < poolSize; i++) {
                 this.clients.add(supplier.get());
             }
+            this.retry = retry;
+            this.maxRetries = maxRetries;
         }
 
         @Override
@@ -66,10 +77,36 @@ public interface ClientPool<C, E extends Exception> {
                 }
                 try {
                     return action.run(client);
+                } catch (Exception e) {
+                    if (retry && isConnectionException(e)) {
+                        int retryAttempts = 0;
+                        while (retryAttempts < maxRetries) {
+                            try {
+                                client = reconnect(client);
+                                return action.run(client);
+                            } catch (Exception ee) {
+                                if (isConnectionException(ee)) {
+                                    retryAttempts++;
+                                    Thread.sleep(CONNECTION_RETRY_WAIT_PERIOD_MS);
+                                } else {
+                                    throw e;
+                                }
+                            }
+                        }
+                    }
+                    throw e;
                 } finally {
                     clients.addFirst(client);
                 }
             }
+        }
+
+        protected boolean isConnectionException(Exception exc) {
+            return false;
+        }
+
+        protected C reconnect(C client) {
+            throw new UnsupportedOperationException();
         }
 
         @Override

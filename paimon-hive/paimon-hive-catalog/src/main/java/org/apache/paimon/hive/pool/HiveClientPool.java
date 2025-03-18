@@ -24,7 +24,9 @@ import org.apache.paimon.hive.RetryingMetaStoreClientFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransportException;
 
 import java.util.function.Supplier;
 
@@ -44,6 +46,26 @@ public class HiveClientPool extends ClientPool.ClientPoolImpl<IMetaStoreClient, 
         HiveConf hiveConf = new HiveConf(conf, HiveClientPool.class);
         hiveConf.addResource(conf);
         return () -> new RetryingMetaStoreClientFactory().createClient(hiveConf, clientClassName);
+    }
+
+    @Override
+    protected boolean isConnectionException(Exception e) {
+        return e instanceof TTransportException
+                || (e instanceof MetaException
+                        && e.getMessage()
+                                .contains(
+                                        "Got exception: org.apache.thrift.transport.TTransportException"));
+    }
+
+    @Override
+    protected IMetaStoreClient reconnect(IMetaStoreClient client) {
+        try {
+            client.close();
+            client.reconnect();
+        } catch (MetaException e) {
+            throw new RuntimeException("Failed to reconnect to Hive Metastore", e);
+        }
+        return client;
     }
 
     @Override
