@@ -151,7 +151,10 @@ public class SparkTimeTravelITCase extends SparkReadTestBase {
     public void testTravelToNonExistedVersion() {
         spark.sql("CREATE TABLE t (k INT, v STRING)");
 
-        assertThat(spark.sql("SELECT * FROM t VERSION AS OF 2").collectAsList()).isEmpty();
+        assertThatThrownBy(() -> spark.sql("SELECT * FROM t VERSION AS OF 2").collectAsList())
+                .satisfies(
+                        anyCauseMatches(
+                                IllegalArgumentException.class, "There is currently no snapshot."));
     }
 
     @Test
