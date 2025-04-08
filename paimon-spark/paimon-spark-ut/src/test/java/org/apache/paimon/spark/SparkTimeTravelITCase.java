@@ -155,15 +155,22 @@ public class SparkTimeTravelITCase extends SparkReadTestBase {
     }
 
     @Test
-    public void testTravelToNonExistedTimestamp() {
+    public void testTravelToTimestampBeforeTheEarliestSnapshot() {
         long anchor = System.currentTimeMillis() / 1000;
 
         spark.sql("CREATE TABLE t (k INT, v STRING)");
 
-        assertThat(
-                        spark.sql(String.format("SELECT * FROM t TIMESTAMP AS OF %s", anchor))
-                                .collectAsList())
-                .isEmpty();
+        assertThatThrownBy(
+                        () ->
+                                spark.sql(
+                                                String.format(
+                                                        "SELECT * FROM t TIMESTAMP AS OF %s",
+                                                        anchor))
+                                        .collectAsList())
+                .satisfies(
+                        anyCauseMatches(
+                                IllegalArgumentException.class,
+                                "There is currently no snapshot earlier than or equal to timestamp"));
     }
 
     @Test
