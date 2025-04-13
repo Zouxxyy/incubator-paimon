@@ -42,3 +42,17 @@ object BucketFunctionBenchmark extends PaimonSqlBasedBenchmark {
     benchmark.run()
   }
 }
+
+/**
+ * OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Mac OS X 14.4.1 Apple M1 Bucket function: Best Time(ms)
+ * Avg Time(ms) Stdev(ms) Rate(M/s) Per Row(ns) Relative
+ * ------------------------------------------------------------------------------------------------------------------------
+ * Single int column 1080 1175 133 18.5 54.0 1.0X Single string column 4692 4886 186 4.3 234.6 0.2X
+ * Multiple columns 8889 9261 351 2.2 444.4 0.1X
+ *
+ * OpenJDK 64-Bit Server VM 1.8.0_332-b09 on Mac OS X 14.4.1 Apple M1 Bucket function: Best Time(ms)
+ * Avg Time(ms) Stdev(ms) Rate(M/s) Per Row(ns) Relative
+ * ------------------------------------------------------------------------------------------------------------------------
+ * Single int column 1931 3459 NaN 10.4 96.5 1.0X Single string column 6069 6192 178 3.3 303.5 0.3X
+ * Multiple columns 10475 12200 NaN 1.9 523.7 0.2X
+ */
