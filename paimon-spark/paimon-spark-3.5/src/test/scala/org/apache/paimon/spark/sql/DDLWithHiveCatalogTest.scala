@@ -18,4 +18,15 @@
 
 package org.apache.paimon.spark.sql
 
-class DDLWithHiveCatalogTest extends DDLWithHiveCatalogTestBase {}
+class DDLWithHiveCatalogTest extends DDLWithHiveCatalogTestBase {
+
+  test("xxx") {
+    sql("use spark_catalog")
+    sql(s"""
+           |create table t1 (a int, b string) using paimon
+           |tblproperties('bucket' = '2', 'bucket-key' = 'a')
+           |""".stripMargin)
+    sql("insert into t1 values (1, 'a'), (2, 'b')")
+    sql("select * from t1").show()
+  }
+}
