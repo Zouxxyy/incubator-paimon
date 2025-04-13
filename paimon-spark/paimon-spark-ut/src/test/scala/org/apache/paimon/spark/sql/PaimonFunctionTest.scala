@@ -38,8 +38,7 @@ class PaimonFunctionTest extends PaimonHiveTestBase {
 
           // test load paimon function
           val identifiers = functionCatalog.listFunctions(Array.empty)
-          PaimonFunctions
-            .names()
+          PaimonFunctions.names
             .forEach(
               name => {
                 val identifier = identifiers.find(x => x.name().equals(name))
@@ -169,6 +168,13 @@ class PaimonFunctionTest extends PaimonHiveTestBase {
           }
         }
     }
+  }
+
+  test("xxx") {
+    sql("create table t1 (id int, c1 int) using paimon")
+    sql("insert into t1 values (1, 2), (2, 2), (3, 2), (2, 2), (1, 3)")
+    sql("select paimon.bucket(10, id, c1) from t1").explain()
+    sql("select paimon.bucket(10, id, c1) from t1").show()
   }
 }
 
