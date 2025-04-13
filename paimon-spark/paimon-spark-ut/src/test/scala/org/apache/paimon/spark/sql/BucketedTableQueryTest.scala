@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 class BucketedTableQueryTest extends PaimonSparkTestBase with AdaptiveSparkPlanHelper {
   private def checkAnswerAndShuffleSorts(query: String, numShuffles: Int, numSorts: Int): Unit = {
     var expectedResult: Array[Row] = null
-    // avoid config default value change in future, so specify it manually
+    // avoid config default value change in the future, so specify it manually
     withSparkSQLConf(
       "spark.sql.sources.v2.bucketing.enabled" -> "false",
       "spark.sql.autoBroadcastJoinThreshold" -> "-1") {

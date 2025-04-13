@@ -31,7 +31,14 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Li
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types.{DataType, DataTypes, StructField, StructType}
 
-/** @param _children arg0: bucket number, arg1..argn bucket key */
+/**
+ * The reason for adding it is that the current spark_catalog cannot access v2 functions, which
+ * results in the inability to recognize the `bucket()` function in write, see
+ * https://github.com/apache/spark/pull/50495, once it is fixed, remove this function.
+ *
+ * @param _children
+ *   arg0: bucket number, arg1..argn bucket key
+ */
 case class FixedBucketExpression(_children: Seq[Expression])
   extends Expression
   with CodegenFallback {
