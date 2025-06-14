@@ -18,7 +18,10 @@
 
 package org.apache.paimon.format.parquet.type;
 
+import org.apache.paimon.data.variant.VariantSchema;
 import org.apache.paimon.types.DataType;
+
+import javax.annotation.Nullable;
 
 /** Field that represent parquet's field type. */
 public abstract class ParquetField {
@@ -28,6 +31,7 @@ public abstract class ParquetField {
     private final int definitionLevel;
     private final boolean required;
     private final String[] path;
+    private @Nullable VariantSchema variantSchema;
 
     public ParquetField(
             DataType type,
@@ -60,6 +64,16 @@ public abstract class ParquetField {
 
     public String[] path() {
         return path;
+    }
+
+    public ParquetField withVariantSchema(@Nullable VariantSchema variantSchema) {
+        this.variantSchema = variantSchema;
+        return this;
+    }
+
+    @Nullable
+    public VariantSchema getVariantSchema() {
+        return variantSchema;
     }
 
     public abstract boolean isPrimitive();

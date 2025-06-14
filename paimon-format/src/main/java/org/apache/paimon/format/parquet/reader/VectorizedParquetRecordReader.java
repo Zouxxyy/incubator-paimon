@@ -27,6 +27,7 @@ import org.apache.paimon.data.columnar.heap.HeapArrayVector;
 import org.apache.paimon.data.columnar.heap.HeapMapVector;
 import org.apache.paimon.data.columnar.heap.HeapRowVector;
 import org.apache.paimon.data.columnar.writable.WritableColumnVector;
+import org.apache.paimon.data.variant.VariantSchema;
 import org.apache.paimon.format.parquet.type.ParquetField;
 import org.apache.paimon.format.parquet.type.ParquetPrimitiveField;
 import org.apache.paimon.fs.Path;
@@ -125,6 +126,7 @@ public class VectorizedParquetRecordReader implements FileRecordReader<InternalR
     }
 
     private void initBatch(WritableColumnVector[] vectors) {
+        VariantSchema[] variantSchemas = getVariantSchemas(fields);
         columnarBatch =
                 new ColumnarBatch(
                         filePath,
@@ -132,7 +134,8 @@ public class VectorizedParquetRecordReader implements FileRecordReader<InternalR
                                 fields.stream()
                                         .map(ParquetField::getType)
                                         .collect(Collectors.toList()),
-                                vectors));
+                                vectors),
+                        variantSchemas);
         columnVectors = new ParquetColumnVector[fields.size()];
         for (int i = 0; i < columnVectors.length; i++) {
             columnVectors[i] =
@@ -210,6 +213,16 @@ public class VectorizedParquetRecordReader implements FileRecordReader<InternalR
         }
 
         return vectors;
+    }
+
+    private VariantSchema[] getVariantSchemas(List<ParquetField> types) {
+        VariantSchema[] variantSchemas = new VariantSchema[types.size()];
+        for (int i = 0; i < types.size(); i++) {
+            if (types.get(i).getVariantSchema() != null) {
+                variantSchemas[i] = types.get(i).getVariantSchema();
+            }
+        }
+        return variantSchemas;
     }
 
     private void checkMissingColumns() throws IOException {

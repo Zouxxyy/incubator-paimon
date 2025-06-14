@@ -196,9 +196,12 @@ public class ShreddingUtils {
             // `typed_value` doesn't exist or is null. Read from `value`.
             builder.appendVariant(new GenericVariant(row.getBinary(variantIdx), metadata));
         } else {
+            // todo: throw malformedVariant(), when https://github.com/apache/paimon/issues/4785
+            // fixed
+            builder.finishWritingObject(builder.getWritePos(), new ArrayList<>());
             // This means the variant is missing in a context where it must present, so the input
             // data is invalid.
-            throw malformedVariant();
+            // throw malformedVariant();
         }
     }
 }

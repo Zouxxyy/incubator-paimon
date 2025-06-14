@@ -31,7 +31,9 @@ import org.apache.paimon.data.columnar.heap.HeapRowVector;
 import org.apache.paimon.data.columnar.heap.HeapShortVector;
 import org.apache.paimon.data.columnar.heap.HeapTimestampVector;
 import org.apache.paimon.data.columnar.writable.WritableColumnVector;
+import org.apache.paimon.data.variant.PaimonShreddingUtils;
 import org.apache.paimon.data.variant.Variant;
+import org.apache.paimon.data.variant.VariantSchema;
 import org.apache.paimon.format.parquet.ParquetSchemaConverter;
 import org.apache.paimon.format.parquet.type.ParquetField;
 import org.apache.paimon.format.parquet.type.ParquetGroupField;
@@ -249,6 +251,11 @@ public class ParquetSplitReaderUtil {
                 }
                 return new HeapRowVector(batchSize, columnVectors);
             case VARIANT:
+                if (((VariantType) fieldType).shreddingSchema() != null) {
+                    fieldType = ((VariantType) fieldType).shreddingSchema();
+                    return createWritableColumnVector(
+                            batchSize, fieldType, type, columnDescriptors, depth);
+                }
                 WritableColumnVector[] vectors = new WritableColumnVector[2];
                 vectors[0] = new HeapBytesVector(batchSize);
                 vectors[1] = new HeapBytesVector(batchSize);
@@ -316,6 +323,14 @@ public class ParquetSplitReaderUtil {
         }
 
         if (type instanceof VariantType) {
+            VariantType variantType = (VariantType) type;
+            if (variantType.shreddingSchema() != null) {
+                type = variantType.shreddingSchema();
+                VariantSchema variantSchema =
+                        PaimonShreddingUtils.buildVariantSchema(variantType.shreddingSchema());
+                return constructField(dataField.newType(type), columnIO)
+                        .withVariantSchema(variantSchema);
+            }
             GroupColumnIO groupColumnIO = (GroupColumnIO) columnIO;
             ImmutableList.Builder<ParquetField> fieldsBuilder = ImmutableList.builder();
             PrimitiveColumnIO value =

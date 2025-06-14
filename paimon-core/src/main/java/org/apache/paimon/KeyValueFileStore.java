@@ -45,6 +45,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.KeyComparatorSupplier;
 import org.apache.paimon.utils.UserDefinedSeqComparator;
 import org.apache.paimon.utils.ValueEqualiserSupplier;
+import org.apache.paimon.utils.VariantUtils;
 
 import javax.annotation.Nullable;
 
@@ -173,7 +174,10 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
             deletionVectorsMaintainerFactory =
                     new DeletionVectorsMaintainer.Factory(newIndexFileHandler());
         }
-
+        RowType writeValueType =
+                options.containsShreddingSchema()
+                        ? VariantUtils.setShreddingSchema(valueType, options)
+                        : valueType;
         if (options.bucket() == BucketMode.POSTPONE_BUCKET) {
             return new PostponeBucketFileStoreWrite(
                     fileIO,
@@ -181,7 +185,7 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
                     commitUser,
                     partitionType,
                     keyType,
-                    valueType,
+                    writeValueType,
                     this::pathFactory,
                     snapshotManager(),
                     newScan(ScanType.FOR_WRITE).withManifestCacheFilter(manifestFilter),
@@ -196,7 +200,7 @@ public class KeyValueFileStore extends AbstractFileStore<KeyValue> {
                     commitUser,
                     partitionType,
                     keyType,
-                    valueType,
+                    writeValueType,
                     keyComparatorSupplier,
                     () -> UserDefinedSeqComparator.create(valueType, options),
                     logDedupEqualSupplier,
