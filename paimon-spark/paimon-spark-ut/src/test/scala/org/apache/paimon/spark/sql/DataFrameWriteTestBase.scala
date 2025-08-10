@@ -18,6 +18,7 @@
 
 package org.apache.paimon.spark.sql
 
+import org.apache.paimon.catalog.Identifier
 import org.apache.paimon.spark.PaimonSparkTestBase
 
 import org.apache.spark.sql.Row
@@ -372,6 +373,7 @@ abstract class DataFrameWriteTestBase extends PaimonSparkTestBase {
                     null,
                     null) :: Row(3, "c", 345L, Map("k" -> 33.3)) :: Nil
                 }
+                paimonCatalog.invalidateTable(Identifier.create("test", "T"))
                 checkAnswer(spark.sql("SELECT * FROM T ORDER BY a, b"), expected2)
 
                 // Case 2: two fields with the evolved types: Int -> Long, Long -> Decimal
@@ -416,6 +418,7 @@ abstract class DataFrameWriteTestBase extends PaimonSparkTestBase {
                     BigDecimal.decimal(456),
                     Map("k" -> 44.4)) :: Nil
                 }
+                paimonCatalog.invalidateTable(Identifier.create("test", "T"))
                 checkAnswer(spark.sql("SELECT * FROM T ORDER BY a, b"), expected3)
 
                 // Case 3: insert Decimal(20,18) to Decimal(38,18)
@@ -429,6 +432,7 @@ abstract class DataFrameWriteTestBase extends PaimonSparkTestBase {
                   .save(location)
                 val expected4 =
                   expected3 ++ Seq(Row(99L, "df4", BigDecimal.decimal(4.0), Map("4" -> 4.1)))
+                paimonCatalog.invalidateTable(Identifier.create("test", "T"))
                 checkAnswer(spark.sql("SELECT * FROM T ORDER BY a, b"), expected4)
                 val decimalType =
                   spark.table("T").schema.apply(2).dataType.asInstanceOf[DecimalType]
@@ -487,6 +491,7 @@ abstract class DataFrameWriteTestBase extends PaimonSparkTestBase {
                 null,
                 null) :: Row(3, "2023-08-03", 34.5d, ts) :: Nil
             }
+            paimonCatalog.invalidateTable(Identifier.create("test", "T"))
             checkAnswer(spark.sql("SELECT * FROM T ORDER BY a, b"), expected2)
 
             // Case 2: a: Int -> Long, b: String -> Date, c: Long -> Int, d: Map -> String
@@ -537,6 +542,7 @@ abstract class DataFrameWriteTestBase extends PaimonSparkTestBase {
                 456,
                 "2023-08-01 11:00:00.0") :: Nil
             }
+            paimonCatalog.invalidateTable(Identifier.create("test", "T"))
             checkAnswer(
               spark.sql("SELECT a, b, c, substring(d, 0, 21) FROM T ORDER BY a, b"),
               expected3)
@@ -691,6 +697,7 @@ abstract class DataFrameWriteTestBase extends PaimonSparkTestBase {
         null,
         56.7d,
         null) :: Nil
+    paimonCatalog.invalidateTable(Identifier.create("test", "T"))
     checkAnswer(spark.sql("SELECT * FROM T ORDER BY a, b"), expected3)
   }
 }
