@@ -71,6 +71,7 @@ private[spark] trait SchemaHelper extends WithFileStoreTable {
   private def mergeAndCommitSchema(dataSchema: StructType, allowExplicitCast: Boolean): Unit = {
     val dataRowType = SparkTypeUtils.toPaimonType(dataSchema).asInstanceOf[RowType]
     if (table.store().mergeSchema(dataRowType, allowExplicitCast)) {
+      table.invalidateCache()
       newTable = Some(table.copyWithLatestSchema())
     }
   }

@@ -127,6 +127,18 @@ public class FallbackReadFileStoreTable extends DelegatedFileStoreTable {
         fallback.setManifestCache(manifestCache);
     }
 
+    @Override
+    public void setInvalidateCache(Runnable run) {
+        super.setInvalidateCache(run);
+        fallback.setInvalidateCache(run);
+    }
+
+    @Override
+    public void invalidateCache() {
+        super.invalidateCache();
+        fallback.invalidateCache();
+    }
+
     private FileStoreTable switchWrappedToBranch(String branchName) {
         Optional<TableSchema> optionalSchema =
                 wrapped.schemaManager().copyWithBranch(branchName).latest();

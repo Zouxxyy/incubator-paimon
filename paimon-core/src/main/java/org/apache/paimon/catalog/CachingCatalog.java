@@ -266,6 +266,7 @@ public class CachingCatalog extends DelegateCatalog {
             if (manifestCache != null) {
                 storeTable.setManifestCache(manifestCache);
             }
+            storeTable.setInvalidateCache(() -> invalidateTable(identifier));
         }
 
         tableCache.put(identifier, table);

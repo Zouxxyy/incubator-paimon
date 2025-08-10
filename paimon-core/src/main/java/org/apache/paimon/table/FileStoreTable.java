@@ -63,6 +63,10 @@ public interface FileStoreTable extends DataTable {
 
     void setStatsCache(Cache<String, Statistics> cache);
 
+    void setInvalidateCache(Runnable run);
+
+    void invalidateCache();
+
     @Override
     default RowType rowType() {
         return schema().logicalRowType();

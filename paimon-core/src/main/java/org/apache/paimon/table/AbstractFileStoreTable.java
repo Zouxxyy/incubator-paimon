@@ -93,6 +93,7 @@ abstract class AbstractFileStoreTable implements FileStoreTable {
     @Nullable protected transient SegmentsCache<Path> manifestCache;
     @Nullable protected transient Cache<Path, Snapshot> snapshotCache;
     @Nullable protected transient Cache<String, Statistics> statsCache;
+    @Nullable protected transient Runnable invalidateCache;
 
     protected AbstractFileStoreTable(
             FileIO fileIO,
@@ -136,6 +137,17 @@ abstract class AbstractFileStoreTable implements FileStoreTable {
     @Override
     public void setStatsCache(Cache<String, Statistics> cache) {
         this.statsCache = cache;
+    }
+
+    @Override
+    public void setInvalidateCache(Runnable run) {
+        this.invalidateCache = run;
+    }
+
+    public void invalidateCache() {
+        if (invalidateCache != null) {
+            invalidateCache.run();
+        }
     }
 
     @Override
@@ -385,6 +397,9 @@ abstract class AbstractFileStoreTable implements FileStoreTable {
         }
         if (statsCache != null) {
             copied.setStatsCache(statsCache);
+        }
+        if (invalidateCache != null) {
+            copied.setInvalidateCache(invalidateCache);
         }
         return copied;
     }
