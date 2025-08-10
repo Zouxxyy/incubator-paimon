@@ -18,6 +18,8 @@
 
 package org.apache.paimon.spark
 
+import org.apache.paimon.catalog.Identifier
+
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.{col, mean, window}
@@ -264,7 +266,7 @@ class PaimonSinkTest extends PaimonSparkTestBase with StreamTest {
           try {
             inputData.addData((1L, date, 123), (3L, date, 456))
             stream.processAllAvailable()
-
+            paimonCatalog.invalidateTable(Identifier.create("test", "T"))
             checkAnswer(
               query(),
               Row(1L, date, 123) :: Row(2L, Date.valueOf("2023-08-09"), null) :: Row(
