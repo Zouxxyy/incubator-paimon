@@ -36,13 +36,6 @@ under the License.
     </properties>
 
     <dependencies>
-        <!-- todo(fix me): we should use the jackson libraries shaded by Paimon. -->
-<!--        <dependency>-->
-<!--            <groupId>com.fasterxml.jackson.module</groupId>-->
-<!--            <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>-->
-<!--            <version>${jackson.version}</version>-->
-<!--        </dependency>-->
-
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-format</artifactId>

@@ -53,6 +53,11 @@ under the License.
 <!--                        <groupId>com.ververica</groupId>-->
 <!--                        <artifactId>frocksdbjni</artifactId>-->
 <!--                    </exclusion>-->
+                    <!-- todo(fix me): we should use the jackson libraries shaded by Paimon. -->
+                    <exclusion>
+                        <groupId>com.fasterxml.jackson.core</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
                     <exclusion>
                         <groupId>org.apache.hadoop</groupId>
                         <artifactId>hadoop-common</artifactId>
