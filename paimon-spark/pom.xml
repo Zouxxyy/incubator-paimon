@@ -45,6 +45,22 @@ under the License.
     <dependencyManagement>
         <dependencies>
             <dependency>
+                <groupId>org.apache.paimon</groupId>
+                <artifactId>paimon-format</artifactId>
+                <version>${project.version}</version>
+                <exclusions>
+<!--                    <exclusion>-->
+<!--                        <groupId>com.ververica</groupId>-->
+<!--                        <artifactId>frocksdbjni</artifactId>-->
+<!--                    </exclusion>-->
+                    <exclusion>
+                        <groupId>org.apache.hadoop</groupId>
+                        <artifactId>hadoop-common</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-sql_${scala.binary.version}</artifactId>
                 <exclusions>

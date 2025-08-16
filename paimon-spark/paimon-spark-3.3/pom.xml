@@ -39,7 +39,6 @@ under the License.
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-format</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <dependency>
