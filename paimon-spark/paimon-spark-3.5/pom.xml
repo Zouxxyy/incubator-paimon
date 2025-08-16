@@ -113,13 +113,6 @@ under the License.
             <classifier>tests</classifier>
             <scope>test</scope>
         </dependency>
-
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-hive_${scala.binary.version}</artifactId>
-            <version>${spark.version}</version>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
