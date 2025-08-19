@@ -21,7 +21,7 @@ package org.apache.spark.sql.catalyst.catalog
 import org.apache.paimon.function.{Function => PaimonFunction}
 import org.apache.paimon.spark.catalog.functions.V1FunctionConverter
 
-import org.apache.spark.sql.{PaimonUtils, SparkSession}
+import org.apache.spark.sql.{AnalysisException, PaimonUtils, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, FunctionRegistry, FunctionRegistryBase, SimpleFunctionRegistry, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -234,13 +234,17 @@ case class PaimonV1FunctionRegistry(session: SparkSession) extends SQLConfHelper
 
         u.filter match {
           case Some(filter) if !filter.deterministic =>
-            throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
+            throw new AnalysisException(
+              "FILTER expression is non-deterministic, it cannot be used in aggregate functions.")
           case Some(filter) if filter.dataType != BooleanType =>
-            throw QueryCompilationErrors.nonBooleanFilterInAggregateError
+            throw new AnalysisException(
+              "FILTER expression is not of type boolean. It cannot be used in an aggregate function.")
           case Some(filter) if filter.exists(_.isInstanceOf[AggregateExpression]) =>
-            throw QueryCompilationErrors.aggregateInAggregateFilterError
+            throw new AnalysisException(
+              "FILTER expression contains aggregate. It cannot be used in an aggregate function.")
           case Some(filter) if filter.exists(_.isInstanceOf[WindowExpression]) =>
-            throw QueryCompilationErrors.windowFunctionInAggregateFilterError
+            throw new AnalysisException(
+              "FILTER expression contains window function. It cannot be used in an aggregate function.")
           case _ =>
         }
         if (u.ignoreNulls) {
