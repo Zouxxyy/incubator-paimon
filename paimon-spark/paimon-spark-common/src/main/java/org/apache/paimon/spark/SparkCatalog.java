@@ -36,7 +36,6 @@ import org.apache.paimon.spark.catalog.SupportV1Function;
 import org.apache.paimon.spark.catalog.SupportView;
 import org.apache.paimon.spark.catalog.functions.PaimonFunctions;
 import org.apache.paimon.spark.catalog.functions.V1FunctionConverter;
-import org.apache.paimon.spark.catalog.functions.V1FunctionRegistry;
 import org.apache.paimon.spark.utils.CatalogUtils;
 import org.apache.paimon.table.FormatTable;
 import org.apache.paimon.table.FormatTableOptions;
@@ -53,7 +52,9 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
+import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction;
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction;
+import org.apache.spark.sql.catalyst.catalog.PaimonV1FunctionRegistry;
 import org.apache.spark.sql.catalyst.expressions.Expression;
 import org.apache.spark.sql.connector.catalog.FunctionCatalog;
 import org.apache.spark.sql.connector.catalog.Identifier;
@@ -92,7 +93,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import scala.Option;
-import scala.collection.Seq;
 
 import static org.apache.paimon.CoreOptions.FILE_FORMAT;
 import static org.apache.paimon.CoreOptions.TYPE;
@@ -125,7 +125,7 @@ public class SparkCatalog extends SparkBaseCatalog
     private Catalog catalog;
     private String defaultDatabase;
     private boolean v1FunctionEnabled;
-    @Nullable private V1FunctionRegistry v1FunctionRegistry;
+    @Nullable private PaimonV1FunctionRegistry v1FunctionRegistry;
 
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
@@ -144,7 +144,7 @@ public class SparkCatalog extends SparkBaseCatalog
                                 SparkCatalogOptions.V1FUNCTION_ENABLED.defaultValue())
                         && DelegateCatalog.rootCatalog(catalog) instanceof RESTCatalog;
         if (v1FunctionEnabled) {
-            this.v1FunctionRegistry = new V1FunctionRegistry(sparkSession);
+            this.v1FunctionRegistry = new PaimonV1FunctionRegistry(sparkSession);
         }
         try {
             catalog.getDatabase(defaultDatabase);
@@ -674,7 +674,7 @@ public class SparkCatalog extends SparkBaseCatalog
         return namespace.length == 0 || (namespace.length == 1 && namespaceExists(namespace));
     }
 
-    private V1FunctionRegistry v1FunctionRegistry() {
+    private PaimonV1FunctionRegistry v1FunctionRegistry() {
         assert v1FunctionRegistry != null;
         return v1FunctionRegistry;
     }
@@ -707,8 +707,10 @@ public class SparkCatalog extends SparkBaseCatalog
 
     @Override
     public Expression registerAndResolveV1Function(
-            FunctionIdentifier funcIdent, Option<Function> func, Seq<Expression> arguments) {
-        return v1FunctionRegistry().registerAndResolveFunction(funcIdent, func, arguments.toSeq());
+            FunctionIdentifier funcIdent,
+            Option<Function> func,
+            UnresolvedFunction unresolvedFunction) {
+        return v1FunctionRegistry().registerAndResolveFunction(funcIdent, func, unresolvedFunction);
     }
 
     @Override

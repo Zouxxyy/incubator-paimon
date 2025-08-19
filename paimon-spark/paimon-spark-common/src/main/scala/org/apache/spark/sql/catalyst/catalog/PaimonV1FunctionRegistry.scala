@@ -16,22 +16,25 @@
  * limitations under the License.
  */
 
-package org.apache.paimon.spark.catalog.functions
+package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.paimon.function.{Function => PaimonFunction}
+import org.apache.paimon.spark.catalog.functions.V1FunctionConverter
 
 import org.apache.spark.sql.{PaimonUtils, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, FunctionRegistry, FunctionRegistryBase, SimpleFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, FunctionRegistry, FunctionRegistryBase, SimpleFunctionRegistry, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionExpressionBuilder, FunctionResource, FunctionResourceLoader}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.{AggregateWindowFunction, Expression, ExpressionInfo, FrameLessOffsetWindowFunction, Lag, Lead, NthValue, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.hive.HiveUDFExpressionBuilder
 import org.apache.spark.sql.paimon.shims.SparkShimLoader
+import org.apache.spark.sql.types.BooleanType
 
 import java.util.Locale
 
-case class V1FunctionRegistry(session: SparkSession) extends SQLConfHelper {
+case class PaimonV1FunctionRegistry(session: SparkSession) extends SQLConfHelper {
 
   // ================== Start Public API ===================
 
@@ -42,13 +45,14 @@ case class V1FunctionRegistry(session: SparkSession) extends SQLConfHelper {
   def registerAndResolveFunction(
       funcIdent: FunctionIdentifier,
       func: Option[PaimonFunction],
-      arguments: Seq[Expression]): Expression = {
-    resolvePersistentFunctionInternal(
+      u: UnresolvedFunction): Expression = {
+    val resolvedFun = resolvePersistentFunctionInternal(
       funcIdent,
       func,
-      arguments,
+      u.arguments,
       functionRegistry,
       makeFunctionBuilder)
+    validateFunction(resolvedFun, u.arguments.length, u)
   }
 
   /** Check if the function is registered. */
@@ -173,5 +177,106 @@ case class V1FunctionRegistry(session: SparkSession) extends SQLConfHelper {
   /** Formats object names, taking into account case sensitivity. */
   protected def format(name: String): String = {
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+  }
+
+  private def validateFunction(
+      func: Expression,
+      numArgs: Int,
+      u: UnresolvedFunction): Expression = {
+    func match {
+      // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
+      // the context of a Window clause. They do not need to be wrapped in an
+      // AggregateExpression.
+      case wf: AggregateWindowFunction =>
+        if (u.isDistinct) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(wf.prettyName, "DISTINCT")
+        } else if (u.filter.isDefined) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            wf.prettyName,
+            "FILTER clause")
+        } else if (u.ignoreNulls) {
+          wf match {
+            case nthValue: NthValue =>
+              nthValue.copy(ignoreNulls = u.ignoreNulls)
+            case _ =>
+              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                wf.prettyName,
+                "IGNORE NULLS")
+          }
+        } else {
+          wf
+        }
+      case owf: FrameLessOffsetWindowFunction =>
+        if (u.isDistinct) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            owf.prettyName,
+            "DISTINCT")
+        } else if (u.filter.isDefined) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            owf.prettyName,
+            "FILTER clause")
+        } else if (u.ignoreNulls) {
+          owf match {
+            case lead: Lead =>
+              lead.copy(ignoreNulls = u.ignoreNulls)
+            case lag: Lag =>
+              lag.copy(ignoreNulls = u.ignoreNulls)
+          }
+        } else {
+          owf
+        }
+      // We get an aggregate function, we need to wrap it in an AggregateExpression.
+      case agg: AggregateFunction =>
+        // Note: PythonUDAF does not support these advanced clauses.
+        // For compatibility with spark3.4
+        if (agg.getClass.getName.equals("org.apache.spark.sql.catalyst.expressions.PythonUDAF"))
+          checkUnsupportedAggregateClause(agg, u)
+
+        u.filter match {
+          case Some(filter) if !filter.deterministic =>
+            throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
+          case Some(filter) if filter.dataType != BooleanType =>
+            throw QueryCompilationErrors.nonBooleanFilterInAggregateError
+          case Some(filter) if filter.exists(_.isInstanceOf[AggregateExpression]) =>
+            throw QueryCompilationErrors.aggregateInAggregateFilterError
+          case Some(filter) if filter.exists(_.isInstanceOf[WindowExpression]) =>
+            throw QueryCompilationErrors.windowFunctionInAggregateFilterError
+          case _ =>
+        }
+        if (u.ignoreNulls) {
+          val aggFunc = agg match {
+            case first: First => first.copy(ignoreNulls = u.ignoreNulls)
+            case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
+            case any_value: AnyValue => any_value.copy(ignoreNulls = u.ignoreNulls)
+            case _ =>
+              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                agg.prettyName,
+                "IGNORE NULLS")
+          }
+          aggFunc.toAggregateExpression(u.isDistinct, u.filter)
+        } else {
+          agg.toAggregateExpression(u.isDistinct, u.filter)
+        }
+      // This function is not an aggregate function, just return the resolved one.
+      case other =>
+        checkUnsupportedAggregateClause(other, u)
+        other
+    }
+  }
+
+  private def checkUnsupportedAggregateClause(func: Expression, u: UnresolvedFunction): Unit = {
+    if (u.isDistinct) {
+      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(func.prettyName, "DISTINCT")
+    }
+    if (u.filter.isDefined) {
+      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+        func.prettyName,
+        "FILTER clause")
+    }
+    if (u.ignoreNulls) {
+      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+        func.prettyName,
+        "IGNORE NULLS")
+    }
   }
 }

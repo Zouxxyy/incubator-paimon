@@ -22,7 +22,7 @@ import org.apache.paimon.function.{Function => PaimonFunction}
 import org.apache.paimon.spark.catalog.SupportV1Function
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.parser.extensions.UnResolvedPaimonV1Function
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -38,8 +38,8 @@ case class PaimonFunctionResolver() extends Rule[LogicalPlan] {
                 v1FunctionCatalog: SupportV1Function,
                 funcIdent: FunctionIdentifier,
                 func: Option[PaimonFunction],
-                arguments: Seq[Expression]) =>
-            v1FunctionCatalog.registerAndResolveV1Function(funcIdent, func, arguments)
+                unresolvedFunction: UnresolvedFunction) =>
+            v1FunctionCatalog.registerAndResolveV1Function(funcIdent, func, unresolvedFunction)
         }
     }
 }

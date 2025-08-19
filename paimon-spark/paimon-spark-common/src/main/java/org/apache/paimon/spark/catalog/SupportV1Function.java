@@ -21,11 +21,11 @@ package org.apache.paimon.spark.catalog;
 import org.apache.paimon.function.Function;
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier;
+import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction;
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction;
 import org.apache.spark.sql.catalyst.expressions.Expression;
 
 import scala.Option;
-import scala.collection.Seq;
 
 /** Catalog supports v1 function. */
 public interface SupportV1Function extends WithPaimonCatalog {
@@ -44,7 +44,10 @@ public interface SupportV1Function extends WithPaimonCatalog {
      * the registered Expression.
      */
     Expression registerAndResolveV1Function(
-            FunctionIdentifier funcIdent, Option<Function> func, Seq<Expression> arguments);
+            FunctionIdentifier funcIdent,
+            Option<Function> func,
+            UnresolvedFunction unresolvedFunction)
+            throws Exception;
 
     /** Unregister the func first, then drop it. */
     void dropV1Function(FunctionIdentifier funcIdent, boolean ifExists) throws Exception;
