@@ -27,6 +27,73 @@ import org.junit.jupiter.api.Assertions
 
 class PaimonMetricTest extends PaimonSparkTestBase {
 
+  test("Paimon Procedure: 1") {
+    Seq("zorder").foreach {
+      orderStrategy =>
+        {
+          withTable("T") {
+            spark.sql(s"""
+                         |CREATE TABLE T (id INT, pt STRING)
+                         |PARTITIONED BY (pt)
+                         |""".stripMargin)
+
+            spark.sql(s"""INSERT INTO T VALUES
+                         |(1, 'p1'), (3, 'p1'),
+                         |(1, 'p2'), (4, 'p2'),
+                         |(3, 'p3'), (2, 'p3'),
+                         |(1, 'p4'), (2, 'p4')
+                         |""".stripMargin)
+
+            spark.sql(s"""INSERT INTO T VALUES
+                         |(4, 'p1'), (2, 'p1'),
+                         |(2, 'p2'), (3, 'p2'),
+                         |(1, 'p3'), (4, 'p3'),
+                         |(3, 'p4'), (4, 'p4')
+                         |""".stripMargin)
+
+            sql(
+              s"CALL sys.compact(table => 'T', order_strategy => '$orderStrategy', order_by => 'id')")
+          }
+        }
+    }
+  }
+
+  test("xxxx") {
+    sql(
+      """
+        |CREATE TABLE my_table_cow2 (id INT,name STRING,added_channel string,age int,ts bigint, pt STRING)
+        |using paimon
+        |PARTITIONED BY (pt)
+        |TBLPROPERTIES (
+        |  'primary-key' = 'id,pt',
+        |  'merge-engine' = 'partial-update',
+        |  'full-compaction.delta-commits' = '1'
+        |);
+        |""".stripMargin)
+
+    sql(
+      """
+        |insert into my_table_cow2(id,age,pt) VALUES(1,10,1);
+        |""".stripMargin)
+
+    sql(
+      """
+        |insert into my_table_cow2(id,age,pt) VALUES(1,20,1);
+        |""".stripMargin)
+
+    sql(
+      """
+        |insert into my_table_cow2(id,age,pt) VALUES(1,30,1);
+        |""".stripMargin)
+
+    sql(
+      """
+        |insert into my_table_cow2(id,age,pt) VALUES(1,40,1);
+        |""".stripMargin)
+
+    val a = 1
+  }
+
   test(s"Paimon Metric: scan driver metric") {
     // Spark support reportDriverMetrics since Spark 3.4
     if (gteqSpark3_4) {

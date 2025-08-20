@@ -643,6 +643,12 @@ public class CoreOptions implements Serializable {
                     .defaultValue(false)
                     .withDescription("Whether to force a compaction before commit.");
 
+    public static final ConfigOption<Boolean> COMMIT_FORCE_FULL_COMPACT =
+        key("commit.force-full-compact")
+            .booleanType()
+            .defaultValue(false)
+            .withDescription("Whether to force a full compaction before commit.");
+
     public static final ConfigOption<Duration> COMMIT_TIMEOUT =
             key("commit.timeout")
                     .durationType()

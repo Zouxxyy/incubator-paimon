@@ -76,6 +76,8 @@ class PaimonSparkTestBase
       .set("spark.sql.catalog.paimon.warehouse", tempDBDir.getCanonicalPath)
       .set("spark.sql.extensions", classOf[PaimonSparkSessionExtensions].getName)
       .set("spark.serializer", serializer)
+      .set("spark.eventLog.enabled", "false")
+      .set("spark.eventLog.dir", "/Users/zxy/data/spark/history")
   }
 
   override protected def beforeAll(): Unit = {
