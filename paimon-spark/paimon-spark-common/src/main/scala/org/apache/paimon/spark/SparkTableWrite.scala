@@ -64,6 +64,11 @@ case class SparkTableWrite(
     var recordsWritten = 0L
     val commitMessages = new ListBuffer[Array[Byte]]()
     val serializer = new CommitMessageSerializer()
+    // ?
+    // 加在这里
+
+    write.compact()
+
     write.prepareCommit().asScala.foreach {
       case message: CommitMessageImpl =>
         message.newFilesIncrement().newFiles().asScala.foreach {

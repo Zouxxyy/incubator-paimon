@@ -177,6 +177,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
         this.options = options;
     }
 
+    // ??? 这个是啥
     @Override
     protected MergeTreeWriter createWriter(
             BinaryRow partition,
@@ -203,6 +204,7 @@ public class KeyValueFileStoreWrite extends MemoryFileStoreWrite<KeyValue> {
                 createCompactManager(
                         partition, bucket, compactStrategy, compactExecutor, levels, dvMaintainer);
 
+        // ????
         return new MergeTreeWriter(
                 options.writeBufferSpillable(),
                 options.writeBufferSpillDiskSize(),

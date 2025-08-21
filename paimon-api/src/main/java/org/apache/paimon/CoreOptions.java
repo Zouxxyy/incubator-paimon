@@ -637,6 +637,7 @@ public class CoreOptions implements Serializable {
                     .withDescription(
                             "Total level number, for example, there are 3 levels, including 0,1,2 levels.");
 
+    // /??
     public static final ConfigOption<Boolean> COMMIT_FORCE_COMPACT =
             key("commit.force-compact")
                     .booleanType()
@@ -1192,6 +1193,7 @@ public class CoreOptions implements Serializable {
                     .withDescription(
                             "Consumer id for recording the offset of consumption in the storage.");
 
+    //
     public static final ConfigOption<Integer> FULL_COMPACTION_DELTA_COMMITS =
             key("full-compaction.delta-commits")
                     .intType()

@@ -225,6 +225,7 @@ public class GlobalFullCompactionSinkWrite extends StoreSinkWriteImpl {
             LOG.debug("Submit full compaction for checkpoint #{}", currentCheckpointId);
         }
         Set<Tuple2<BinaryRow, Integer>> compactedBuckets = new HashSet<>();
+        // 这里触发的
         writtenBuckets.forEach(
                 (checkpointId, buckets) -> {
                     for (Tuple2<BinaryRow, Integer> bucket : buckets) {

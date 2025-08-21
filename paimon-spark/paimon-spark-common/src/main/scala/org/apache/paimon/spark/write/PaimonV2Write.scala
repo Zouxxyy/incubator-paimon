@@ -138,6 +138,7 @@ private case class WriterFactory(writeSchema: StructType, batchWriteBuilder: Bat
   }
 }
 
+// here!!!!!
 private class PaimonDataWriter(batchTableWrite: BatchTableWrite, writeSchema: StructType)
   extends DataWriter[InternalRow] {
 
@@ -156,6 +157,7 @@ private class PaimonDataWriter(batchTableWrite: BatchTableWrite, writeSchema: St
 
   override def commit(): WriterCommitMessage = {
     try {
+      // 在这里compact
       val commitMessages = batchTableWrite.prepareCommit().asScala.toSeq
       TaskCommit(commitMessages)
     } finally {
