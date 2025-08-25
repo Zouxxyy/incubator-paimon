@@ -41,23 +41,8 @@ public class ConfigurationUtil {
             return null;
         }
 
-        Class<?> foundClass;
         try {
-            foundClass = configuration.getClassByName(className);
-            if (!assignableFrom.isAssignableFrom(foundClass)) {
-                final String paimonSharedClassName = "org.apache.paimon.shade." + className;
-                foundClass = configuration.getClassByName(paimonSharedClassName);
-                if (!assignableFrom.isAssignableFrom(foundClass)) {
-                    throw new BadConfigurationException(
-                            "class "
-                                    + className
-                                    + " set in job conf at "
-                                    + configName
-                                    + " is not a subclass of "
-                                    + assignableFrom.getCanonicalName());
-                }
-            }
-            return foundClass;
+            return configuration.getClassByName(className);
         } catch (ClassNotFoundException e) {
             throw new BadConfigurationException(
                     "could not instantiate class "
