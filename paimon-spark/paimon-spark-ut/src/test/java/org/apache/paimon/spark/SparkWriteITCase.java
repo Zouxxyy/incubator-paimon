@@ -129,6 +129,35 @@ public class SparkWriteITCase {
     }
 
     @Test
+    public void testCurrentTimestampAndCurrentDateDefaultValue() {
+        spark.sql(
+                "CREATE TABLE T (a INT, b TIMESTAMP DEFAULT current_timestamp(), c TIMESTAMP_NTZ DEFAULT current_timestamp, d DATE DEFAULT current_date()) TBLPROPERTIES"
+                        + " ('file.format'='avro')");
+
+        spark.sql("INSERT INTO T (a) VALUES (1), (2)");
+
+        assertThat(
+                        spark.sql(
+                                        "SELECT a FROM T WHERE b >= (current_timestamp() - INTERVAL '1' MINUTE)")
+                                .collectAsList()
+                                .toString())
+                .isEqualTo("[[1], [2]]");
+
+        assertThat(
+                        spark.sql(
+                                        "SELECT a FROM T WHERE c >= (current_timestamp() - INTERVAL '1' MINUTE)")
+                                .collectAsList()
+                                .toString())
+                .isEqualTo("[[1], [2]]");
+
+        assertThat(
+                        spark.sql("SELECT a FROM T WHERE d >= (current_date() - INTERVAL '1' DAY)")
+                                .collectAsList()
+                                .toString())
+                .isEqualTo("[[1], [2]]");
+    }
+
+    @Test
     public void testWriteWithArrayDefaultValue() {
         // Test Array type default value - using Spark SQL function syntax
         spark.sql(
