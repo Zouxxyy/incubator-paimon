@@ -136,6 +136,9 @@ public class SparkWriteITCase {
 
         spark.sql("INSERT INTO T (a) VALUES (1), (2)");
 
+        spark.sql("select * from T").show(false);
+        spark.sql("select current_timestamp()").show(false);
+
         assertThat(
                         spark.sql(
                                         "SELECT a FROM T WHERE b >= (current_timestamp() - INTERVAL '1' MINUTE)")
