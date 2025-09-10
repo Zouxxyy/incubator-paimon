@@ -28,9 +28,9 @@ under the License.
 
 Just like all other tables, Paimon tables can be queried with `SELECT` statement.
 
-## Batch Query
+## Query
 
-Paimon's batch read returns all the data in a snapshot of the table. By default, batch reads return the latest snapshot.
+Paimon's read returns all the data in a snapshot of the table. By default, reads return the latest snapshot.
 
 ```sql
 -- read all columns
@@ -55,9 +55,9 @@ SELECT *, __paimon_file_path, __paimon_partition, __paimon_bucket, __paimon_row_
 Note: only append table or deletion vector table support querying metadata columns.
 {{< /hint >}}
 
-### Batch Time Travel
+### Time Travel
 
-Paimon batch reads with time travel can specify a snapshot or a tag and read the corresponding data.
+Paimon reads with time travel can specify a snapshot or a tag and read the corresponding data.
 
 Requires Spark 3.3+.
 
@@ -87,7 +87,7 @@ you have a tag named '1' based on snapshot 2, the statement `SELECT * FROM t VER
 instead of snapshot 1.
 {{< /hint >}}
 
-### Batch Incremental
+### Incremental
 
 Read incremental changes between start snapshot (exclusive) and end snapshot.
 
