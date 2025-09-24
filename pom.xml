@@ -165,6 +165,7 @@ under the License.
             --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
             -Djdk.reflect.useDirectMethodHandle=false
             -Dio.netty.tryReflectionSetAccessible=true
+            -verbose:class
         </extraJavaTestArgs>
     </properties>
 
