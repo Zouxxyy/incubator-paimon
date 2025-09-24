@@ -116,6 +116,11 @@ public class SimpleFileEntry implements FileEntry {
     }
 
     @Nullable
+    public byte[] embeddedIndex() {
+        return embeddedIndex;
+    }
+
+    @Nullable
     @Override
     public String externalPath() {
         return externalPath;
