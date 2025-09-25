@@ -389,7 +389,7 @@ public class FileStoreCommitImpl implements FileStoreCommit {
                             latestSnapshot,
                             baseEntries,
                             SimpleFileEntry.from(compactTableFiles),
-                            null,
+                            compactIndexFiles,
                             CommitKind.COMPACT);
                     // assume this compact commit follows just after the append commit created above
                     safeLatestSnapshotId += 1;
@@ -1438,17 +1438,18 @@ public class FileStoreCommitImpl implements FileStoreCommit {
             Snapshot snapshot,
             List<SimpleFileEntry> baseEntries,
             List<SimpleFileEntry> deltaEntries,
-            @Nullable List<IndexManifestEntry> deltaIndexEntries,
+            List<IndexManifestEntry> deltaIndexEntries,
             CommitKind commitKind) {
         String baseCommitUser = snapshot.commitUser();
 
+        boolean needCheckDeletionVector = needCheckDeletionVector(deltaIndexEntries, commitKind);
         // Enrich dvName in fileEntry for checker for base ADD dv and delta DELETE dv, for example:
         // if the base file is <ADD baseFile1, ADD dv1>,
         // then the delta file must be <DELETE deltaFile1, DELETE dv1>; and vice versa,
         // if the delta file is <DELETE deltaFile2, DELETE dv2>,
         // then the base file must be <ADD baseFile2, ADD dv2>.
         List<SimpleFileEntry> allEntries = new ArrayList<>();
-        if (deletionVectorsEnabled && deltaIndexEntries != null) {
+        if (needCheckDeletionVector) {
             allEntries.addAll(
                     enrichEntriesWithDV(
                             baseEntries,
@@ -1522,7 +1523,7 @@ public class FileStoreCommitImpl implements FileStoreCommit {
         assertNoDelete(mergedEntries, exceptionFunction);
 
         // Dv checker for delta ADD dv, for example: the new dv pointed to the file must exist.
-        if (deletionVectorsEnabled && deltaIndexEntries != null) {
+        if (needCheckDeletionVector) {
             checkForAddDeletionVector(mergedEntries, deltaIndexEntries, exceptionFunction);
         }
 
@@ -1583,6 +1584,30 @@ public class FileStoreCommitImpl implements FileStoreCommit {
             assertConflictForPartitionExpire(mergedEntries);
             throw exceptionFunction.apply(e);
         }
+    }
+
+    private boolean needCheckDeletionVector(
+            Collection<IndexManifestEntry> deltaIndexEntries, CommitKind commitKind) {
+        if (!deletionVectorsEnabled) {
+            return false;
+        }
+
+        int allDvIndex = 0;
+        int allDeleteDvIndex = 0;
+        for (IndexManifestEntry deltaIndexEntry : deltaIndexEntries) {
+            if (deltaIndexEntry.indexFile().indexType().equals(DELETION_VECTORS_INDEX)) {
+                allDvIndex++;
+                if (deltaIndexEntry.kind().equals(FileKind.DELETE)) {
+                    allDeleteDvIndex++;
+                }
+            }
+        }
+
+        if (commitKind.equals(CommitKind.COMPACT) && allDvIndex > 0 && allDeleteDvIndex == 0) {
+            return false;
+        }
+
+        return true;
     }
 
     private void checkForAddDeletionVector(
