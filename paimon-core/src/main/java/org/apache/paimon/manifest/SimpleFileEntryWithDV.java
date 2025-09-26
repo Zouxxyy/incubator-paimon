@@ -22,7 +22,7 @@ import javax.annotation.Nullable;
 
 import java.util.Objects;
 
-/** A {@link FileEntry} contains simpleFileEntry and dv file name. */
+/** A {@link FileEntry} contains {@link SimpleFileEntry} and dv file name. */
 public class SimpleFileEntryWithDV extends SimpleFileEntry {
 
     @Nullable private final String dvFileName;
