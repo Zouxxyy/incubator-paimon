@@ -50,7 +50,11 @@ jobs:
           distribution: 'temurin'
 
       - name: Build Spark
-        run:  mvn -T 2C -B clean install -DskipTests -Pspark4,flink1
+        run:  |
+          echo "GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
+          git clone -b master --depth=1 https://github.com/apache/paimon.git && cd paimon/
+          git fetch origin refs/pull/6360/merge:pr_branch && git checkout pr_branch
+          #mvn -T 2C -B clean install -DskipTests -Pspark4,flink1
 
       - name: Test Spark
         timeout-minutes: 60

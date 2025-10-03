@@ -58,9 +58,7 @@ jobs:
           echo "GITHUB_BASE_REF: $GITHUB_BASE_REF"
           echo "GITHUB_HEAD_REF: $GITHUB_HEAD_REF"
           echo "GITHUB_REF: $GITHUB_REF"
-          git clone --depth=1 $GITHUB_REF && cd paimon/
-          
-          #mvn -T 2C -B clean install -DskipTests -Pspark3,flink1,scala-${{ matrix.scala_version }}
+          git clone -b $GITHUB_REF --depth=1 https://github.com/apache/paimon.git && cd paimon/          
 
       - name: Test Spark 3 with ${{ matrix.scala_version }}
         timeout-minutes: 60
