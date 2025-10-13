@@ -60,6 +60,10 @@ public class HadoopFileIO implements FileIO {
 
     private final org.apache.hadoop.fs.Path path;
 
+    public HadoopFileIO() {
+        this.path = null;
+    }
+
     public HadoopFileIO(Path path) {
         this.path = path(path);
     }
