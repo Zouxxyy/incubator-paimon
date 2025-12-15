@@ -19,7 +19,8 @@
 package org.apache.paimon.spark
 
 import org.apache.paimon.CoreOptions
-import org.apache.paimon.predicate.{Predicate, PredicateBuilder, TopN}
+import org.apache.paimon.partition.PartitionPredicate
+import org.apache.paimon.predicate.{Predicate, TopN}
 import org.apache.paimon.spark.schema.PaimonMetadataColumn
 import org.apache.paimon.spark.schema.PaimonMetadataColumn._
 import org.apache.paimon.table.{SpecialFields, Table}
@@ -30,10 +31,18 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.types.StructType
 
+import scala.collection.JavaConverters._
+
 trait ColumnPruningAndPushDown extends Scan with Logging {
+
   def table: Table
+
+  // Column pruning
   def requiredSchema: StructType
-  def filters: Seq[Predicate]
+
+  // Push down
+  def pushDownPartitionFilters: Seq[PartitionPredicate]
+  def pushDownDataFilters: Seq[Predicate]
   def pushDownLimit: Option[Int] = None
   def pushDownTopN: Option[TopN] = None
 
@@ -82,9 +91,13 @@ trait ColumnPruningAndPushDown extends Scan with Logging {
 
   lazy val readBuilder: ReadBuilder = {
     val _readBuilder = table.newReadBuilder().withReadType(readTableRowType)
-    if (filters.nonEmpty) {
-      val pushedPredicate = PredicateBuilder.and(filters: _*)
-      _readBuilder.withFilter(pushedPredicate)
+    if (pushDownPartitionFilters.nonEmpty) {
+      // todo: support multiple partition filters
+      assert(pushDownPartitionFilters.size == 1)
+      _readBuilder.withPartitionFilter(pushDownPartitionFilters.head)
+    }
+    if (pushDownDataFilters.nonEmpty) {
+      _readBuilder.withFilter(pushDownDataFilters.asJava)
     }
     pushDownLimit.foreach(_readBuilder.withLimit)
     pushDownTopN.foreach(_readBuilder.withTopN)

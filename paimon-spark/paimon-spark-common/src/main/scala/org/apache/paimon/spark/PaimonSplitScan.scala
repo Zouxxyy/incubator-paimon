@@ -18,7 +18,7 @@
 
 package org.apache.paimon.spark
 
-import org.apache.paimon.CoreOptions
+import org.apache.paimon.partition.PartitionPredicate
 import org.apache.paimon.predicate.Predicate
 import org.apache.paimon.table.{InnerTable, KnownSplitsTable}
 import org.apache.paimon.table.source.{DataSplit, Split}
@@ -29,7 +29,12 @@ import org.apache.spark.sql.types.StructType
 
 class PaimonSplitScanBuilder(table: KnownSplitsTable) extends PaimonScanBuilder(table) {
   override def build(): Scan = {
-    PaimonSplitScan(table, table.splits(), requiredSchema, pushedPaimonPredicates)
+    PaimonSplitScan(
+      table,
+      table.splits(),
+      requiredSchema,
+      pushedPartitionFilters,
+      pushedDataFilters)
   }
 }
 
@@ -38,7 +43,8 @@ case class PaimonSplitScan(
     table: InnerTable,
     dataSplits: Array[DataSplit],
     requiredSchema: StructType,
-    filters: Seq[Predicate])
+    pushDownPartitionFilters: Seq[PartitionPredicate],
+    pushDownDataFilters: Seq[Predicate])
   extends ColumnPruningAndPushDown
   with ScanHelper {
 
@@ -66,11 +72,16 @@ case class PaimonSplitScan(
   }
 
   override def description(): String = {
-    val pushedFiltersStr = if (filters.nonEmpty) {
-      ", PushedFilters: [" + filters.mkString(",") + "]"
+    val pushedPartitionFiltersStr = if (pushDownPartitionFilters.nonEmpty) {
+      ", PushedPartitionFilters: [" + pushDownPartitionFilters.mkString(",") + "]"
     } else {
       ""
     }
-    s"PaimonSplitScan: [${table.name}]" + pushedFiltersStr
+    val pushedDataFiltersStr = if (pushDownDataFilters.nonEmpty) {
+      ", PushedDataFilters: [" + pushDownDataFilters.mkString(",") + "]"
+    } else {
+      ""
+    }
+    s"PaimonSplitScan: [${table.name}]" + pushedPartitionFiltersStr + pushedDataFiltersStr
   }
 }

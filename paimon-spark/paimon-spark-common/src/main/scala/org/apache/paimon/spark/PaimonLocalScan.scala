@@ -18,6 +18,7 @@
 
 package org.apache.paimon.spark
 
+import org.apache.paimon.partition.PartitionPredicate
 import org.apache.paimon.predicate.Predicate
 import org.apache.paimon.table.Table
 
@@ -30,15 +31,21 @@ case class PaimonLocalScan(
     rows: Array[InternalRow],
     readSchema: StructType,
     table: Table,
-    filters: Array[Predicate])
+    pushDownPartitionFilters: Seq[PartitionPredicate],
+    pushDownDataFilters: Array[Predicate])
   extends LocalScan {
 
   override def description(): String = {
-    val pushedFiltersStr = if (filters.nonEmpty) {
-      ", PushedFilters: [" + filters.mkString(",") + "]"
+    val pushedPartitionFiltersStr = if (pushDownPartitionFilters.nonEmpty) {
+      ", PushedPartitionFilters: [" + pushDownPartitionFilters.mkString(",") + "]"
     } else {
       ""
     }
-    s"PaimonLocalScan: [${table.name}]" + pushedFiltersStr
+    val pushedDataFiltersStr = if (pushDownDataFilters.nonEmpty) {
+      ", PushedDataFilters: [" + pushDownDataFilters.mkString(",") + "]"
+    } else {
+      ""
+    }
+    s"PaimonLocalScan: [${table.name}]" + pushedPartitionFiltersStr + pushedDataFiltersStr
   }
 }

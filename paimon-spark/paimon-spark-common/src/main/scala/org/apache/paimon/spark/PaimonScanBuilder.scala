@@ -115,15 +115,21 @@ class PaimonScanBuilder(table: InnerTable)
     }
 
     val readBuilder = table.newReadBuilder
-    if (pushedPaimonPredicates.nonEmpty) {
-      val pushedPartitionPredicate = PredicateBuilder.and(pushedPaimonPredicates.toList.asJava)
-      readBuilder.withFilter(pushedPartitionPredicate)
+    if (pushedPartitionFilters.nonEmpty) {
+      // todo: support multiple partition filters
+      assert(pushedPartitionFilters.length == 1)
+      readBuilder.withPartitionFilter(pushedPartitionFilters.head)
     }
 
     tryPushdownAggregation(table.asInstanceOf[FileStoreTable], aggregation, readBuilder) match {
       case Some(agg) =>
         localScan = Some(
-          PaimonLocalScan(agg.result(), agg.resultSchema(), table, pushedPaimonPredicates)
+          PaimonLocalScan(
+            agg.result(),
+            agg.resultSchema(),
+            table,
+            pushedPartitionFilters,
+            pushedDataFilters)
         )
         true
       case None => false
@@ -131,16 +137,16 @@ class PaimonScanBuilder(table: InnerTable)
   }
 
   override def build(): Scan = {
-    if (localScan.isDefined) {
-      localScan.get
-    } else {
-      PaimonScan(
-        table,
-        requiredSchema,
-        pushedPaimonPredicates,
-        reservedFilters,
-        pushDownLimit,
-        pushDownTopN)
+    localScan match {
+      case Some(scan) => scan
+      case None =>
+        PaimonScan(
+          table,
+          requiredSchema,
+          pushedPartitionFilters,
+          pushedDataFilters,
+          pushDownLimit,
+          pushDownTopN)
     }
   }
 }

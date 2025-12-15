@@ -18,6 +18,8 @@
 
 package org.apache.paimon.spark
 
+import org.apache.paimon.partition.PartitionPredicate
+import org.apache.paimon.partition.PartitionPredicate.splitPartitionPredicatesAndDataPredicates
 import org.apache.paimon.predicate.{PartitionPredicateVisitor, Predicate}
 import org.apache.paimon.types.RowType
 
@@ -26,6 +28,7 @@ import org.apache.spark.sql.sources.Filter
 
 import java.util.{List => JList}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 /** Base trait for Paimon scan filter push down. */
@@ -35,8 +38,8 @@ trait PaimonBasePushDown extends SupportsPushDownFilters {
   protected var rowType: RowType
 
   private var pushedSparkFilters = Array.empty[Filter]
-  protected var pushedPaimonPredicates: Array[Predicate] = Array.empty
-  protected var reservedFilters: Array[Filter] = Array.empty
+  protected var pushedPartitionFilters: Array[PartitionPredicate] = Array.empty
+  protected var pushedDataFilters: Array[Predicate] = Array.empty
   protected var hasPostScanPredicates = false
 
   /**
@@ -45,33 +48,43 @@ trait PaimonBasePushDown extends SupportsPushDownFilters {
    * must be interpreted as ANDed together.
    */
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    val pushable = mutable.ArrayBuffer.empty[(Filter, Predicate)]
+    val pushable = mutable.ArrayBuffer.empty[Filter]
+    val pushablePartitionDataFilters = mutable.ArrayBuffer.empty[Predicate]
+    val pushableDataFilters = mutable.ArrayBuffer.empty[Predicate]
     val postScan = mutable.ArrayBuffer.empty[Filter]
-    val reserved = mutable.ArrayBuffer.empty[Filter]
 
     val converter = new SparkFilterConverter(rowType)
-    val visitor = new PartitionPredicateVisitor(partitionKeys)
+    val partitionPredicateVisitor = new PartitionPredicateVisitor(partitionKeys)
     filters.foreach {
       filter =>
         val predicate = converter.convertIgnoreFailure(filter)
         if (predicate == null) {
           postScan.append(filter)
         } else {
-          pushable.append((filter, predicate))
-          if (predicate.visit(visitor)) {
-            reserved.append(filter)
+          pushable.append(filter)
+          if (predicate.visit(partitionPredicateVisitor)) {
+            pushablePartitionDataFilters.append(predicate)
           } else {
+            pushableDataFilters.append(predicate)
             postScan.append(filter)
           }
         }
     }
 
     if (pushable.nonEmpty) {
-      this.pushedSparkFilters = pushable.map(_._1).toArray
-      this.pushedPaimonPredicates = pushable.map(_._2).toArray
+      this.pushedSparkFilters = pushable.toArray
     }
-    if (reserved.nonEmpty) {
-      this.reservedFilters = reserved.toArray
+    if (pushablePartitionDataFilters.nonEmpty) {
+      val pair = splitPartitionPredicatesAndDataPredicates(
+        pushablePartitionDataFilters.asJava,
+        rowType,
+        partitionKeys)
+      assert(pair.getRight.isEmpty)
+      assert(pair.getLeft.isPresent)
+      this.pushedPartitionFilters = Array(pair.getLeft.get())
+    }
+    if (pushableDataFilters.nonEmpty) {
+      this.pushedDataFilters = pushableDataFilters.toArray
     }
     if (postScan.nonEmpty) {
       this.hasPostScanPredicates = true

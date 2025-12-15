@@ -18,6 +18,7 @@
 
 package org.apache.paimon.spark
 
+import org.apache.paimon.partition.PartitionPredicate
 import org.apache.paimon.predicate.Predicate
 import org.apache.paimon.table.FormatTable
 
@@ -33,9 +34,15 @@ import scala.collection.JavaConverters._
 case class PaimonFormatTableScan(
     table: FormatTable,
     requiredSchema: StructType,
-    filters: Seq[Predicate],
+    pushDownPartitionFilters: Seq[PartitionPredicate],
+    pushDownDataFilters: Seq[Predicate],
     override val pushDownLimit: Option[Int])
-  extends PaimonFormatTableBaseScan(table, requiredSchema, filters, pushDownLimit)
+  extends PaimonFormatTableBaseScan(
+    table,
+    requiredSchema,
+    pushDownPartitionFilters,
+    pushDownDataFilters,
+    pushDownLimit)
   with SupportsRuntimeFiltering
   with ScanHelper {
 
