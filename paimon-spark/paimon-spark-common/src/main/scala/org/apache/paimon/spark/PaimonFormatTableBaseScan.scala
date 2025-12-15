@@ -18,24 +18,16 @@
 
 package org.apache.paimon.spark
 
-import org.apache.paimon.partition.PartitionPredicate
-import org.apache.paimon.predicate.Predicate
 import org.apache.paimon.table.FormatTable
 import org.apache.paimon.table.source.Split
 
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{Batch, Statistics, SupportsReportStatistics}
-import org.apache.spark.sql.types.StructType
 
 import scala.collection.JavaConverters._
 
 /** Base Scan implementation for [[FormatTable]]. */
-abstract class PaimonFormatTableBaseScan(
-    table: FormatTable,
-    requiredSchema: StructType,
-    pushDownPartitionFilters: Seq[PartitionPredicate],
-    pushDownDataFilters: Seq[Predicate],
-    pushDownLimit: Option[Int])
+abstract class PaimonFormatTableBaseScan
   extends ColumnPruningAndPushDown
   with SupportsReportStatistics
   with ScanHelper {
@@ -83,19 +75,5 @@ abstract class PaimonFormatTableBaseScan(
     Array(
       PaimonResultedTableFilesTaskMetric(filesCount)
     )
-  }
-
-  override def description(): String = {
-    val pushedPartitionFiltersStr = if (pushDownPartitionFilters.nonEmpty) {
-      ", PushedPartitionFilters: [" + pushDownPartitionFilters.mkString(",") + "]"
-    } else {
-      ""
-    }
-    val pushedDataFiltersStr = if (pushDownDataFilters.nonEmpty) {
-      ", PushedDataFilters: [" + pushDownDataFilters.mkString(",") + "]"
-    } else {
-      ""
-    }
-    s"PaimonFormatTableScan: [${table.name}]" + pushedPartitionFiltersStr + pushedDataFiltersStr
   }
 }

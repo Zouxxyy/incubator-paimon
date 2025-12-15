@@ -42,14 +42,7 @@ case class PaimonScan(
     override val pushDownLimit: Option[Int],
     override val pushDownTopN: Option[TopN],
     bucketedScanDisabled: Boolean = false)
-  extends PaimonScanCommon(
-    table,
-    requiredSchema,
-    pushDownPartitionFilters,
-    pushDownDataFilters,
-    pushDownLimit,
-    pushDownTopN,
-    bucketedScanDisabled)
+  extends PaimonScanCommon(table, requiredSchema, bucketedScanDisabled)
   with SupportsRuntimeV2Filtering {
   def disableBucketedScan(): PaimonScan = {
     copy(bucketedScanDisabled = true)
@@ -87,17 +80,8 @@ case class PaimonScan(
 abstract class PaimonScanCommon(
     table: InnerTable,
     requiredSchema: StructType,
-    pushDownPartitionFilters: Seq[PartitionPredicate],
-    pushDownDataFilters: Seq[Predicate],
-    override val pushDownLimit: Option[Int],
-    override val pushDownTopN: Option[TopN],
     bucketedScanDisabled: Boolean = false)
-  extends PaimonBaseScan(
-    table,
-    requiredSchema,
-    pushDownPartitionFilters,
-    pushDownDataFilters,
-    pushDownLimit)
+  extends PaimonBaseScan(table)
   with SupportsReportPartitioning
   with SupportsReportOrdering {
 

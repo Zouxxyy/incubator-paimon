@@ -19,8 +19,6 @@
 package org.apache.paimon.spark
 
 import org.apache.paimon.annotation.VisibleForTesting
-import org.apache.paimon.partition.PartitionPredicate
-import org.apache.paimon.predicate.Predicate
 import org.apache.paimon.spark.metric.SparkMetricRegistry
 import org.apache.paimon.spark.sources.PaimonMicroBatchStream
 import org.apache.paimon.spark.util.OptionUtils
@@ -37,12 +35,7 @@ import java.util.Optional
 
 import scala.collection.JavaConverters._
 
-abstract class PaimonBaseScan(
-    table: InnerTable,
-    requiredSchema: StructType,
-    pushDownPartitionFilters: Seq[PartitionPredicate],
-    pushDownDataFilters: Seq[Predicate],
-    pushDownLimit: Option[Int])
+abstract class PaimonBaseScan(table: InnerTable)
   extends Scan
   with SupportsReportStatistics
   with ScanHelper
@@ -127,26 +120,5 @@ abstract class PaimonBaseScan(
         }
       case _ =>
     }
-  }
-
-  override def description(): String = {
-    val pushedPartitionFiltersStr = if (pushDownPartitionFilters.nonEmpty) {
-      ", PushedPartitionFilters: [" + pushDownPartitionFilters.mkString(",") + "]"
-    } else {
-      ""
-    }
-    val pushedDataFiltersStr = if (pushDownDataFilters.nonEmpty) {
-      ", PushedDataFilters: [" + pushDownDataFilters.mkString(",") + "]"
-    } else {
-      ""
-    }
-    val pushedTopNFilterStr = if (pushDownTopN.nonEmpty) {
-      s", PushedTopNFilter: [${pushDownTopN.get.toString}]"
-    } else {
-      ""
-    }
-    s"PaimonScan: [${table.name}]" +
-      pushedPartitionFiltersStr + pushedDataFiltersStr + pushedTopNFilterStr +
-      pushDownLimit.map(limit => s", Limit: [$limit]").getOrElse("")
   }
 }

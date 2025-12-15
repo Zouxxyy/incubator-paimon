@@ -39,12 +39,7 @@ case class PaimonScan(
     // no usage, just for compile compatibility
     override val pushDownTopN: Option[TopN],
     bucketedScanDisabled: Boolean = true)
-  extends PaimonBaseScan(
-    table,
-    requiredSchema,
-    pushDownPartitionFilters,
-    pushDownDataFilters,
-    pushDownLimit)
+  extends PaimonBaseScan(table)
   with SupportsRuntimeFiltering {
 
   override def filterAttributes(): Array[NamedReference] = {

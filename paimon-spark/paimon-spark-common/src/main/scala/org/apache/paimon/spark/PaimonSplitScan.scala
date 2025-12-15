@@ -70,18 +70,4 @@ case class PaimonSplitScan(
       PaimonResultedTableFilesTaskMetric(filesCount)
     )
   }
-
-  override def description(): String = {
-    val pushedPartitionFiltersStr = if (pushDownPartitionFilters.nonEmpty) {
-      ", PushedPartitionFilters: [" + pushDownPartitionFilters.mkString(",") + "]"
-    } else {
-      ""
-    }
-    val pushedDataFiltersStr = if (pushDownDataFilters.nonEmpty) {
-      ", PushedDataFilters: [" + pushDownDataFilters.mkString(",") + "]"
-    } else {
-      ""
-    }
-    s"PaimonSplitScan: [${table.name}]" + pushedPartitionFiltersStr + pushedDataFiltersStr
-  }
 }

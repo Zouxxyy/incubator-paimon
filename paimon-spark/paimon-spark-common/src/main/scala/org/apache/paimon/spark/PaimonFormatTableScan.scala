@@ -31,9 +31,4 @@ case class PaimonFormatTableScan(
     pushDownPartitionFilters: Seq[PartitionPredicate],
     pushDownDataFilters: Seq[Predicate],
     override val pushDownLimit: Option[Int])
-  extends PaimonFormatTableBaseScan(
-    table,
-    requiredSchema,
-    pushDownPartitionFilters,
-    pushDownDataFilters,
-    pushDownLimit) {}
+  extends PaimonFormatTableBaseScan {}

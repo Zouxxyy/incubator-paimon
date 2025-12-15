@@ -117,4 +117,22 @@ trait ColumnPruningAndPushDown extends Scan with Logging {
     }
     _readSchema
   }
+
+  override def description(): String = {
+    val pushedPartitionFiltersStr = if (pushDownPartitionFilters.nonEmpty) {
+      ", PushedPartitionFilters: [" + pushDownPartitionFilters.mkString(",") + "]"
+    } else {
+      ""
+    }
+    val pushedDataFiltersStr = if (pushDownDataFilters.nonEmpty) {
+      ", PushedDataFilters: [" + pushDownDataFilters.mkString(",") + "]"
+    } else {
+      ""
+    }
+    s"${getClass.getSimpleName}: [${table.name}]" +
+      pushedPartitionFiltersStr +
+      pushedDataFiltersStr +
+      pushDownTopN.map(topN => s", PushedTopNFilter: [$topN]").getOrElse("") +
+      pushDownLimit.map(limit => s", Limit: [$limit]").getOrElse("")
+  }
 }
