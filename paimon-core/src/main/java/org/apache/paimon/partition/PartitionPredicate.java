@@ -296,16 +296,25 @@ public interface PartitionPredicate extends Serializable {
         }
     }
 
+    static PartitionPredicate and(List<PartitionPredicate> predicates) {
+        checkArgument(!predicates.isEmpty());
+        if (predicates.size() == 1) {
+            return predicates.get(0);
+        }
+
+        return new AndPartitionPredicate(predicates);
+    }
+
     /** AND-combines multiple {@link PartitionPredicate}s. */
-    class AndPartitionPredicate implements PartitionPredicate {
+    final class AndPartitionPredicate implements PartitionPredicate {
 
         private static final long serialVersionUID = 1L;
 
         private final List<PartitionPredicate> predicates;
 
-        public AndPartitionPredicate(List<PartitionPredicate> predicates) {
+        private AndPartitionPredicate(List<PartitionPredicate> predicates) {
             checkArgument(!predicates.isEmpty());
-            this.predicates = Collections.unmodifiableList(predicates);
+            this.predicates = Collections.unmodifiableList(new ArrayList<>(predicates));
         }
 
         @Override
