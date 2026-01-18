@@ -608,4 +608,15 @@ public class StringUtils {
     public static String truncatedString(Collection<?> lst, String start, String sep, String end) {
         return truncatedString(lst, start, sep, end, DEFAULT_MAX_FIELDS);
     }
+
+    /**
+     * Compares two strings for equality.
+     *
+     * @param a the first string
+     * @param b the second string
+     * @return true if the strings are equal, false otherwise
+     */
+    public static boolean equals(String a, String b) {
+        return Objects.equals(a, b);
+    }
 }

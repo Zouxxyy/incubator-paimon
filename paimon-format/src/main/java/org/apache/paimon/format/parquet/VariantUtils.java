@@ -20,7 +20,6 @@ package org.apache.paimon.format.parquet;
 
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.data.variant.PaimonShreddingUtils;
-import org.apache.paimon.data.variant.VariantAccessInfo;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -34,7 +33,6 @@ import org.apache.parquet.schema.MessageType;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 import static org.apache.paimon.data.variant.Variant.METADATA;
@@ -106,20 +104,5 @@ public class VariantUtils {
             }
         }
         return new RowType(rowType.isNullable(), newFields);
-    }
-
-    public static List<List<VariantAccessInfo.VariantField>> buildVariantFields(
-            DataField[] readFields, @Nullable VariantAccessInfo[] variantAccess) {
-        HashMap<String, List<VariantAccessInfo.VariantField>> map = new HashMap<>();
-        if (variantAccess != null) {
-            for (VariantAccessInfo accessInfo : variantAccess) {
-                map.put(accessInfo.columnName(), accessInfo.variantFields());
-            }
-        }
-        List<List<VariantAccessInfo.VariantField>> variantFields = new ArrayList<>();
-        for (DataField readField : readFields) {
-            variantFields.add(map.getOrDefault(readField.name(), null));
-        }
-        return variantFields;
     }
 }

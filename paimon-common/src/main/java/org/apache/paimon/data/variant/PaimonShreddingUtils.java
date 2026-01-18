@@ -581,16 +581,25 @@ public class PaimonShreddingUtils {
      * extract. If it is variant struct, return a list of fields matching the variant struct fields.
      */
     public static FieldToExtract[] getFieldsToExtract(
-            List<VariantAccessInfo.VariantField> variantFields, VariantSchema variantSchema) {
-        if (variantFields != null) {
-            return variantFields.stream()
+            RowType variantRowType, VariantSchema variantSchema) {
+        if (variantRowType != null && VariantMetadataHelper.isVariantRowType(variantRowType)) {
+            return variantRowType.getFields().stream()
                     .map(
-                            field ->
-                                    buildFieldsToExtract(
-                                            field.dataField().type(),
-                                            field.path(),
-                                            field.castArgs(),
-                                            variantSchema))
+                            field -> {
+                                String path =
+                                        VariantMetadataHelper.extractPath(field.description());
+                                boolean failOnError =
+                                        VariantMetadataHelper.extractFailOnError(
+                                                field.description());
+                                String timeZoneId =
+                                        VariantMetadataHelper.extractTimeZoneId(
+                                                field.description());
+                                VariantCastArgs castArgs =
+                                        new VariantCastArgs(
+                                                failOnError, java.time.ZoneId.of(timeZoneId));
+                                return buildFieldsToExtract(
+                                        field.type(), path, castArgs, variantSchema);
+                            })
                     .toArray(FieldToExtract[]::new);
         }
         return null;

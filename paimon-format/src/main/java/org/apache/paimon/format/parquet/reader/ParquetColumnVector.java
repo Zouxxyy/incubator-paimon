@@ -25,9 +25,11 @@ import org.apache.paimon.data.columnar.writable.WritableColumnVector;
 import org.apache.paimon.data.columnar.writable.WritableIntVector;
 import org.apache.paimon.data.variant.PaimonShreddingUtils;
 import org.apache.paimon.data.variant.PaimonShreddingUtils.FieldToExtract;
+import org.apache.paimon.data.variant.VariantMetadataHelper;
 import org.apache.paimon.data.variant.VariantSchema;
 import org.apache.paimon.format.parquet.type.ParquetField;
 import org.apache.paimon.format.parquet.type.ParquetGroupField;
+import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypeRoot;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.Preconditions;
@@ -93,8 +95,15 @@ public class ParquetColumnVector {
             children.add(contentVector);
             variantSchema =
                     PaimonShreddingUtils.buildVariantSchema((RowType) fileContentCol.getType());
-            fieldsToExtract =
-                    PaimonShreddingUtils.getFieldsToExtract(column.variantFields(), variantSchema);
+            // Extract variant fields from type if it's a variant row type
+            DataType readType = column.getType();
+            if (readType instanceof RowType
+                    && VariantMetadataHelper.isVariantRowType((RowType) readType)) {
+                fieldsToExtract =
+                        PaimonShreddingUtils.getFieldsToExtract((RowType) readType, variantSchema);
+            } else {
+                fieldsToExtract = null;
+            }
             repetitionLevels = contentVector.repetitionLevels;
             definitionLevels = contentVector.definitionLevels;
         } else if (isPrimitive) {
