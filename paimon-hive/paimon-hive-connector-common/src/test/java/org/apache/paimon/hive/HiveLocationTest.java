@@ -23,9 +23,11 @@ import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.Path;
+import org.apache.paimon.hive.annotation.Minio;
 import org.apache.paimon.hive.runner.PaimonEmbeddedHiveRunner;
 import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
+import org.apache.paimon.s3.MinioTestContainer;
 import org.apache.paimon.schema.Schema;
 import org.apache.paimon.schema.SchemaManager;
 import org.apache.paimon.schema.TableSchema;
@@ -53,17 +55,21 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Test for specify location. */
 @RunWith(PaimonEmbeddedHiveRunner.class)
 public class HiveLocationTest {
     @HiveSQL(files = {})
     private static HiveShell hiveShell;
+
+    @Minio private static MinioTestContainer minioTestContainer;
 
     public static final String HIVE_CONF = "/hive-conf";
 
@@ -90,6 +96,11 @@ public class HiveLocationTest {
         options.set(HiveCatalogOptions.HIVE_CONF_DIR, hiveShell.getBaseDir() + HIVE_CONF);
         options.set(HiveCatalogOptions.LOCATION_IN_PROPERTIES, true);
 
+        for (Map.Entry<String, String> stringStringEntry :
+                minioTestContainer.getS3ConfigOptions().entrySet()) {
+            options.set(stringStringEntry.getKey(), stringStringEntry.getValue());
+        }
+
         // create CatalogContext using the options
         catalogContext = CatalogContext.create(options);
 
@@ -101,6 +112,14 @@ public class HiveLocationTest {
         catalog = (HiveCatalog) hiveCatalogFactory.create(catalogContext);
 
         hmsClient = catalog.getHmsClient();
+
+        String setTemplate = "SET paimon.%s=%s";
+        minioTestContainer
+                .getS3ConfigOptions()
+                .forEach(
+                        (k, v) -> {
+                            hiveShell.execute(String.format(setTemplate, k, v));
+                        });
     }
 
     private static FileIO getFileIO(CatalogContext catalogContext, Path warehouse) {
@@ -185,13 +204,24 @@ public class HiveLocationTest {
     @Test
     public void testExternTableLocation() throws Exception {
 
-        String path = hiveShell.getBaseDir().toAbsolutePath().toString() + "/" + UUID.randomUUID();
+        String path = minioTestContainer.getS3UriForDefaultBucket() + "/" + UUID.randomUUID();
 
         Options conf = new Options();
         conf.set(CatalogOptions.WAREHOUSE, path);
 
+        for (Map.Entry<String, String> stringStringEntry :
+                minioTestContainer.getS3ConfigOptions().entrySet()) {
+            conf.set(stringStringEntry.getKey(), stringStringEntry.getValue());
+        }
+
         RowType rowType = RowType.of(new DataType[] {DataTypes.INT()}, new String[] {"aaa"});
-        createTableWithStorageLocation(path, rowType, "test_extern_table", conf, true);
+        // create table with location field
+        assertThatThrownBy(
+                        () ->
+                                createTableWithStorageLocation(
+                                        path, rowType, "test_extern_table", conf, true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("No FileSystem for scheme: s3");
 
         // create table with location in table properties
         Set<String> tableForTest = Sets.newHashSet("test_extern_table1", "hive_inner_table1");

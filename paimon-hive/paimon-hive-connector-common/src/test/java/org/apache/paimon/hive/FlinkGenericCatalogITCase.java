@@ -20,7 +20,9 @@ package org.apache.paimon.hive;
 
 import org.apache.paimon.flink.FlinkGenericCatalog;
 import org.apache.paimon.flink.FlinkGenericCatalogFactory;
+import org.apache.paimon.hive.annotation.Minio;
 import org.apache.paimon.hive.runner.PaimonEmbeddedHiveRunner;
+import org.apache.paimon.s3.MinioTestContainer;
 
 import org.apache.paimon.shade.guava30.com.google.common.collect.ImmutableList;
 
@@ -59,6 +61,8 @@ public class FlinkGenericCatalogITCase extends AbstractTestBaseJUnit4 {
 
     @HiveSQL(files = {})
     protected static HiveShell hiveShell;
+
+    @Minio private static MinioTestContainer minioTestContainer;
 
     private static HiveCatalog createHiveCatalog(HiveConf hiveConf) {
         return new HiveCatalog(
