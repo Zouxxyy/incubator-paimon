@@ -156,7 +156,7 @@ public class CachingCatalog extends DelegateCatalog {
 
     @Override
     public CatalogLoader catalogLoader() {
-        return new CachingCatalogLoader(wrapped.catalogLoader(), options);
+        return new CachingCatalogLoader(wrapped.catalogLoader(), options, this);
     }
 
     @Override
@@ -252,6 +252,9 @@ public class CachingCatalog extends DelegateCatalog {
         }
 
         table = wrapped.getTable(identifier);
+        if (table instanceof FileStoreTable) {
+            ((FileStoreTable) table).catalogEnvironment().setCatalogLoader(catalogLoader());
+        }
         putTableCache(identifier, table);
         return table;
     }

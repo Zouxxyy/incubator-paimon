@@ -48,7 +48,7 @@ public class CatalogEnvironment implements Serializable {
 
     @Nullable private final Identifier identifier;
     @Nullable private final String uuid;
-    @Nullable private final CatalogLoader catalogLoader;
+    @Nullable private CatalogLoader catalogLoader;
     @Nullable private final CatalogLockFactory lockFactory;
     @Nullable private final CatalogLockContext lockContext;
     @Nullable private final CatalogContext catalogContext;
@@ -111,6 +111,15 @@ public class CatalogEnvironment implements Serializable {
 
     public boolean supportsVersionManagement() {
         return supportsVersionManagement;
+    }
+
+    @Nullable
+    public SchemaModification schemaModification() {
+        if (catalogLoader == null) {
+            return null;
+        }
+        Catalog catalog = catalogLoader.load();
+        return SchemaModification.create(catalog, identifier);
     }
 
     @Nullable
@@ -197,6 +206,10 @@ public class CatalogEnvironment implements Serializable {
                 catalogContext,
                 supportsVersionManagement,
                 supportsPartitionModification);
+    }
+
+    public void setCatalogLoader(@Nullable CatalogLoader catalogLoader) {
+        this.catalogLoader = catalogLoader;
     }
 
     public TableQueryAuth tableQueryAuth(CoreOptions options) {

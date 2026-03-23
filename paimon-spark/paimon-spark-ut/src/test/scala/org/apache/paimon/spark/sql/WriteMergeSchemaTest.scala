@@ -25,9 +25,9 @@ import org.apache.spark.sql.Row
 
 class WriteMergeSchemaTest extends PaimonSparkTestBase {
 
-  // todo: fix this
   override protected def sparkConf: SparkConf = {
-    super.sparkConf.set("spark.sql.catalog.paimon.cache-enabled", "false")
+    super.sparkConf
+      .set("spark.paimon.write.use-v2-write", "false")
   }
 
   import testImplicits._

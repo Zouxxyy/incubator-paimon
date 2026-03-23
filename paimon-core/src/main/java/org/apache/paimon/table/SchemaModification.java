@@ -16,31 +16,31 @@
  * limitations under the License.
  */
 
-package org.apache.paimon.catalog;
+package org.apache.paimon.table;
 
-import org.apache.paimon.options.Options;
+import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.Identifier;
+import org.apache.paimon.schema.SchemaChange;
 
-/** Loader to create {@link CachingCatalog}. */
-public class CachingCatalogLoader implements CatalogLoader {
+import java.util.List;
 
-    private static final long serialVersionUID = 1L;
+/** Handler to alter table schema via catalog. */
+public interface SchemaModification extends AutoCloseable {
 
-    private final CatalogLoader catalogLoader;
-    private final Options options;
+    void alterSchema(List<SchemaChange> changes) throws Exception;
 
-    private transient Catalog cached;
+    static SchemaModification create(Catalog catalog, Identifier identifier) {
+        return new SchemaModification() {
 
-    CachingCatalogLoader(CatalogLoader catalogLoader, Options options, Catalog cached) {
-        this.catalogLoader = catalogLoader;
-        this.options = options;
-        this.cached = cached;
-    }
+            @Override
+            public void alterSchema(List<SchemaChange> changes) throws Exception {
+                catalog.alterTable(identifier, changes, false);
+            }
 
-    @Override
-    public Catalog load() {
-        if (cached != null) {
-            return cached;
-        }
-        return CachingCatalog.tryToCreate(catalogLoader.load(), options);
+            @Override
+            public void close() throws Exception {
+                catalog.close();
+            }
+        };
     }
 }
