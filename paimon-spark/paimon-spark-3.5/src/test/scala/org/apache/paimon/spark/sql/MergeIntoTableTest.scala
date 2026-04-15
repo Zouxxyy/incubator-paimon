@@ -21,6 +21,7 @@ package org.apache.paimon.spark.sql
 import org.apache.paimon.spark.{PaimonAppendBucketedTableTest, PaimonAppendNonBucketTableTest, PaimonPrimaryKeyBucketedTableTest, PaimonPrimaryKeyNonBucketTableTest}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.Row
 
 class MergeIntoPrimaryKeyBucketedTableTest
   extends MergeIntoTableTestBase
@@ -100,4 +101,39 @@ class V2MergeIntoAppendNonBucketedTableTest
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set("spark.paimon.write.use-v2-write", "true")
   }
+}
+
+class MergeIntoAppendBucketedTableJustTest
+  extends MergeIntoTableTestBase
+  with PaimonAppendBucketedTableTest {
+
+  import testImplicits._
+
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf.set("spark.paimon.write.use-v2-write", "true")
+  }
+
+  test("just test") {
+    withTable("source", "target") {
+      createTable("source", "a INT, b CHAR(36)", Seq("a"))
+      createTable("target", "a INT, b STRING", Seq("a"))
+      sql("INSERT INTO target values (1, 'guid_tgt_1'), (2, 'guid_tgt_2')")
+      sql("INSERT INTO source values (1, 'guid_src_1'), (3, 'guid_src_3')")
+
+      sql(s"""
+             |MERGE INTO target AS dest
+             |USING source AS src
+             |ON dest.a = src.a
+             |WHEN MATCHED AND (nullif(cast(src.b as STRING), '') IS NOT NULL) THEN
+             |UPDATE SET dest.b = COALESCE(nullif(cast(src.b as STRING), ''), dest.b)
+             |WHEN NOT MATCHED THEN
+             |INSERT (a, b) VALUES (src.a, nullif(cast(src.b as STRING), ''))
+             |""".stripMargin)
+
+      checkAnswer(
+        sql("SELECT a, trim(b) FROM target ORDER BY a"),
+        Row(1, "guid_src_1") :: Row(2, "guid_tgt_2") :: Row(3, "guid_src_3") :: Nil)
+    }
+  }
+
 }

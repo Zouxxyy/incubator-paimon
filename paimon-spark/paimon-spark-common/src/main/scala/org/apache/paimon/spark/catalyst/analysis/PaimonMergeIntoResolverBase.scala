@@ -18,14 +18,27 @@
 
 package org.apache.paimon.spark.catalyst.analysis
 
-import org.apache.paimon.spark.catalyst.analysis.expressions.ExpressionHelper
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical._
 
-trait PaimonMergeIntoResolverBase extends ExpressionHelper {
+trait PaimonMergeIntoResolverBase {
+
+  protected trait MergeExpressionResolver {
+
+    def resolveCondition(
+        condition: Expression,
+        mergeInto: MergeIntoTable,
+        resolvedWith: ResolvedWith): Expression
+
+    def resolveAssignment(
+        assignment: Assignment,
+        mergeInto: MergeIntoTable,
+        resolvedWith: ResolvedWith): Assignment
+  }
+
+  protected def newResolver(spark: SparkSession): MergeExpressionResolver
 
   def apply(merge: MergeIntoTable, spark: SparkSession): LogicalPlan = {
     val target = merge.targetTable
@@ -33,7 +46,7 @@ trait PaimonMergeIntoResolverBase extends ExpressionHelper {
     assert(target.resolved, "Target should have been resolved here.")
     assert(source.resolved, "Source should have been resolved here.")
 
-    val resolve: (Expression, LogicalPlan) => Expression = resolveExpression(spark)
+    val resolve = newResolver(spark)
 
     val resolvedCond = resolveCondition(resolve, merge.mergeCondition, merge, ALL)
     val resolvedMatched = resolveMatchedByTargetActions(merge, resolve)
@@ -52,7 +65,7 @@ trait PaimonMergeIntoResolverBase extends ExpressionHelper {
 
   private def resolveMatchedByTargetActions(
       merge: MergeIntoTable,
-      resolve: (Expression, LogicalPlan) => Expression): Seq[MergeAction] = {
+      resolve: MergeExpressionResolver): Seq[MergeAction] = {
     merge.matchedActions.map {
       case DeleteAction(condition) =>
         // The condition can be from both target and source tables
@@ -79,7 +92,7 @@ trait PaimonMergeIntoResolverBase extends ExpressionHelper {
 
   private def resolveNotMatchedByTargetActions(
       merge: MergeIntoTable,
-      resolve: (Expression, LogicalPlan) => Expression): Seq[MergeAction] = {
+      resolve: MergeExpressionResolver): Seq[MergeAction] = {
     merge.notMatchedActions.map {
       case InsertAction(condition, assignments) =>
         // The condition and value must be from the source table
@@ -103,41 +116,28 @@ trait PaimonMergeIntoResolverBase extends ExpressionHelper {
     }
   }
 
-  def resolveNotMatchedBySourceActions(
+  protected def resolveNotMatchedBySourceActions(
       merge: MergeIntoTable,
-      resolve: (Expression, LogicalPlan) => Expression): Seq[MergeAction]
+      resolve: MergeExpressionResolver): Seq[MergeAction]
 
   sealed trait ResolvedWith
   case object ALL extends ResolvedWith
   case object SOURCE_ONLY extends ResolvedWith
   case object TARGET_ONLY extends ResolvedWith
 
-  def resolveCondition(
-      resolve: (Expression, LogicalPlan) => Expression,
+  protected def resolveCondition(
+      resolver: MergeExpressionResolver,
       condition: Expression,
       mergeInto: MergeIntoTable,
       resolvedWith: ResolvedWith): Expression = {
-    resolvedWith match {
-      case ALL => resolve(condition, mergeInto)
-      case SOURCE_ONLY => resolve(condition, Project(Nil, mergeInto.sourceTable))
-      case TARGET_ONLY => resolve(condition, Project(Nil, mergeInto.targetTable))
-    }
+    resolver.resolveCondition(condition, mergeInto, resolvedWith)
   }
 
-  def resolveAssignments(
-      resolve: (Expression, LogicalPlan) => Expression,
+  protected def resolveAssignments(
+      resolver: MergeExpressionResolver,
       assignments: Seq[Assignment],
       mergeInto: MergeIntoTable,
       resolvedWith: ResolvedWith): Seq[Assignment] = {
-    assignments.map {
-      assign =>
-        val resolvedKey = resolve(assign.key, Project(Nil, mergeInto.targetTable))
-        val resolvedValue = resolvedWith match {
-          case ALL => resolve(assign.value, mergeInto)
-          case SOURCE_ONLY => resolve(assign.value, Project(Nil, mergeInto.sourceTable))
-          case TARGET_ONLY => resolve(assign.value, Project(Nil, mergeInto.targetTable))
-        }
-        Assignment(resolvedKey, resolvedValue)
-    }
+    assignments.map(resolver.resolveAssignment(_, mergeInto, resolvedWith))
   }
 }

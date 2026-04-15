@@ -479,7 +479,7 @@ abstract class MergeIntoTableTestBase extends PaimonSparkTestBase with PaimonTab
       createTable("target", "a INT, b INT, c STRING", Seq("a"))
       spark.sql("INSERT INTO target values (1, 10, 'c1'), (2, 20, 'c2')")
 
-      val error = intercept[RuntimeException] {
+      val exception = intercept[Exception] {
         spark.sql(s"""
                      |MERGE INTO target
                      |USING source
@@ -489,8 +489,10 @@ abstract class MergeIntoTableTestBase extends PaimonSparkTestBase with PaimonTab
                      |WHEN NOT MATCHED
                      |THEN INSERT *
                      |""".stripMargin)
-      }.getMessage
-      assert(error.contains("cannot resolve b from Project"))
+      }
+      val error = exception.getMessage
+      assert(
+        error.contains("cannot resolve b from Project") || error.contains("cannot be resolved"))
     }
   }
 

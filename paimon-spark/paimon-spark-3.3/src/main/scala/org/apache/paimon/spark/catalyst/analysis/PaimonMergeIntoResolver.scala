@@ -18,14 +18,21 @@
 
 package org.apache.paimon.spark.catalyst.analysis
 
+import org.apache.paimon.spark.catalyst.analysis.expressions.ExpressionHelper
+
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, MergeAction, MergeIntoTable}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, LogicalPlan, MergeAction, MergeIntoTable, Project}
 
-object PaimonMergeIntoResolver extends PaimonMergeIntoResolverBase {
+object PaimonMergeIntoResolver extends PaimonMergeIntoResolverBase with ExpressionHelper {
 
-  def resolveNotMatchedBySourceActions(
+  override protected def newResolver(spark: SparkSession): MergeExpressionResolver = {
+    new LegacyMergeExpressionResolver(spark)
+  }
+
+  override protected def resolveNotMatchedBySourceActions(
       merge: MergeIntoTable,
-      resolve: (Expression, LogicalPlan) => Expression): Seq[MergeAction] = {
+      resolve: MergeExpressionResolver): Seq[MergeAction] = {
     Seq.empty
   }
 
@@ -43,6 +50,36 @@ object PaimonMergeIntoResolver extends PaimonMergeIntoResolverBase {
       mergeCondition = resolvedCond,
       matchedActions = resolvedMatched,
       notMatchedActions = resolvedNotMatched)
+  }
+
+  final private class LegacyMergeExpressionResolver(spark: SparkSession)
+    extends MergeExpressionResolver {
+
+    private val resolve: (Expression, LogicalPlan) => Expression = resolveExpression(spark)
+
+    override def resolveCondition(
+        condition: Expression,
+        mergeInto: MergeIntoTable,
+        resolvedWith: ResolvedWith): Expression = {
+      resolvedWith match {
+        case ALL => resolve(condition, mergeInto)
+        case SOURCE_ONLY => resolve(condition, Project(Nil, mergeInto.sourceTable))
+        case TARGET_ONLY => resolve(condition, Project(Nil, mergeInto.targetTable))
+      }
+    }
+
+    override def resolveAssignment(
+        assignment: Assignment,
+        mergeInto: MergeIntoTable,
+        resolvedWith: ResolvedWith): Assignment = {
+      val resolvedKey = resolve(assignment.key, Project(Nil, mergeInto.targetTable))
+      val resolvedValue = resolvedWith match {
+        case ALL => resolve(assignment.value, mergeInto)
+        case SOURCE_ONLY => resolve(assignment.value, Project(Nil, mergeInto.sourceTable))
+        case TARGET_ONLY => resolve(assignment.value, Project(Nil, mergeInto.targetTable))
+      }
+      Assignment(resolvedKey, resolvedValue)
+    }
   }
 
 }
