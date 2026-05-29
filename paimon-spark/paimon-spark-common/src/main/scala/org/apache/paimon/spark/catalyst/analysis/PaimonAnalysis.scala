@@ -18,11 +18,12 @@
 
 package org.apache.paimon.spark.catalyst.analysis
 
+import org.apache.paimon.options.Options
 import org.apache.paimon.spark.{SparkConnectorOptions, SparkTable}
 import org.apache.paimon.spark.catalyst.Compatibility
 import org.apache.paimon.spark.catalyst.analysis.PaimonRelation.isPaimonTable
 import org.apache.paimon.spark.catalyst.plans.logical.PaimonDropPartitions
-import org.apache.paimon.spark.commands.{PaimonAnalyzeTableColumnCommand, PaimonDynamicPartitionOverwriteCommand, PaimonShowColumnsCommand}
+import org.apache.paimon.spark.commands.{PaimonAnalyzeTableColumnCommand, PaimonDynamicPartitionOverwriteCommand, PaimonShowColumnsCommand, SchemaEvolutionHelper}
 import org.apache.paimon.spark.util.OptionUtils
 import org.apache.paimon.table.FileStoreTable
 
@@ -35,6 +36,8 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation}
 
+import scala.collection.JavaConverters._
+
 class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
   import DataSourceV2Implicits._
   import PaimonAnalysis._
@@ -43,12 +46,20 @@ class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
     case a @ PaimonV2WriteCommand(table)
         if !paimonWriteResolved(a.query, table) &&
           a.query.getTagValue(PAIMON_WRITE_RESOLVED).isEmpty =>
+      val opts = writeOptions(a)
       val mergeSchemaEnabled =
-        writeOptions(a).get(SparkConnectorOptions.MERGE_SCHEMA.key()).contains("true") ||
+        opts.get(SparkConnectorOptions.MERGE_SCHEMA.key()).contains("true") ||
           OptionUtils.writeMergeSchemaEnabled()
+      val expected = SchemaEvolutionHelper.expectedAttrsForCatalogWrite(
+        table,
+        a.query.schema,
+        Options.fromMap(opts.asJava),
+        mergeSchemaEnabled,
+        a.isByName,
+        session)
       val newQuery = PaimonOutputResolver.resolveOutputColumns(
         table.name,
-        table.output,
+        expected,
         a.query,
         a.isByName,
         mergeSchemaEnabled)

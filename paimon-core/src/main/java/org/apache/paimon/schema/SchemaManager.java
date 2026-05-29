@@ -752,6 +752,7 @@ public class SchemaManager implements Serializable {
 
     public boolean mergeSchema(
             RowType rowType,
+            boolean typeWidening,
             boolean allowExplicitCast,
             boolean caseSensitive,
             @Nullable SchemaModification schemaModification) {
@@ -761,7 +762,8 @@ public class SchemaManager implements Serializable {
                                         new RuntimeException(
                                                 "It requires that the current schema to exist when calling 'mergeSchema'"));
         TableSchema update =
-                SchemaMergingUtils.mergeSchemas(current, rowType, allowExplicitCast, caseSensitive);
+                SchemaMergingUtils.mergeSchemas(
+                        current, rowType, typeWidening, allowExplicitCast, caseSensitive);
         if (current.equals(update)) {
             return false;
         }

@@ -41,7 +41,7 @@ case class WriteIntoPaimonTable(
     batchId: Option[Long] = None)
   extends RunnableCommand
   with ExpressionHelper
-  with SchemaHelper
+  with SchemaEvolutionHelper
   with Logging {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

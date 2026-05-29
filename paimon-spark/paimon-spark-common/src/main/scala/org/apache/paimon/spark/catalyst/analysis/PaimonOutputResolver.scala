@@ -40,7 +40,8 @@ object PaimonOutputResolver extends SQLConfHelper {
    * How nested struct field misalignment is handled:
    *   - [[FailMissing]]: strict — nested missing target / source-extra throws.
    *   - [[NullForMissing]]: merge-schema for INSERT / explicit UPDATE — missing NULL-fills,
-   *     source-extras kept so [[org.apache.paimon.spark.commands.SchemaHelper]] evolves the table.
+   *     source-extras kept so [[org.apache.paimon.spark.commands.SchemaEvolutionHelper]] evolves
+   *     the table.
    *   - [[PreserveTarget]]: merge-schema for `UPDATE *` struct — missing source field substitutes
    *     `GetStructField(targetExpr, ordinal)` to keep the current target value.
    */
