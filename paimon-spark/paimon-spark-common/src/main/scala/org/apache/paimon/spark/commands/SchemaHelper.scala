@@ -19,6 +19,7 @@
 package org.apache.paimon.spark.commands
 
 import org.apache.paimon.options.Options
+import org.apache.paimon.schema.SchemaMergingUtils
 import org.apache.paimon.spark.{SparkConnectorOptions, SparkTypeUtils}
 import org.apache.paimon.spark.schema.SparkSystemColumns
 import org.apache.paimon.spark.util.OptionUtils
@@ -68,9 +69,16 @@ private[spark] trait SchemaHelper extends WithFileStoreTable {
     val filteredDataSchema = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
     val allowExplicitCast = options.get(SparkConnectorOptions.EXPLICIT_CAST) || OptionUtils
       .writeMergeSchemaExplicitCastEnabled()
+    val typeWidening = options.get(SparkConnectorOptions.TYPE_WIDENING) || OptionUtils
+      .writeMergeSchemaTypeWideningEnabled()
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     SchemaHelper
-      .mergeAndCommitSchema(table, filteredDataSchema, allowExplicitCast, caseSensitive)
+      .mergeAndCommitSchema(
+        table,
+        filteredDataSchema,
+        typeWidening,
+        allowExplicitCast,
+        caseSensitive)
       .foreach { updatedTable => newTable = Some(updatedTable) }
 
     val writeSchema = SparkTypeUtils.fromPaimonRowType(table.schema().logicalRowType())
@@ -95,13 +103,41 @@ private[spark] object SchemaHelper {
   def mergeAndCommitSchema(
       table: FileStoreTable,
       dataSchema: StructType,
-      allowExplicitCast: Boolean,
+      typeWidening: Boolean = false,
+      allowExplicitCast: Boolean = false,
       caseSensitive: Boolean = true): Option[FileStoreTable] = {
     val dataRowType = SparkTypeUtils.toPaimonType(dataSchema).asInstanceOf[RowType]
-    if (table.store().mergeSchema(dataRowType, allowExplicitCast, caseSensitive)) {
+    if (table.store().mergeSchema(dataRowType, typeWidening, allowExplicitCast, caseSensitive)) {
       Some(table.copyWithLatestSchema())
     } else {
       None
+    }
+  }
+
+  /**
+   * Compute the merged Spark schema WITHOUT committing it. Returns the merged schema if it differs
+   * from the table's current schema, otherwise None. Mirrors Delta's analysis-time finalSchema
+   * computation — the commit is deferred to execution time.
+   */
+  def computeMergedSparkSchema(
+      table: FileStoreTable,
+      dataSchema: StructType,
+      typeWidening: Boolean,
+      allowExplicitCast: Boolean,
+      caseSensitive: Boolean): Option[StructType] = {
+    val dataRowType = SparkTypeUtils.toPaimonType(dataSchema).asInstanceOf[RowType]
+    val current = table.schema()
+    val merged =
+      SchemaMergingUtils.mergeSchemas(
+        current,
+        dataRowType,
+        typeWidening,
+        allowExplicitCast,
+        caseSensitive)
+    if (merged.logicalRowType() == current.logicalRowType()) {
+      None
+    } else {
+      Some(SparkTypeUtils.fromPaimonRowType(merged.logicalRowType()))
     }
   }
 
@@ -140,6 +176,10 @@ private[spark] object SchemaHelper {
           if !PaimonUtils.sameType(sVal, tVal) =>
         transform_values(sourceCol, (_, v) => alignStruct(v, sVal, tVal, resolve))
           .as(targetField.name)
+      case _ if !PaimonUtils.sameType(sourceType, targetField.dataType) =>
+        // Keep-existing default: source leaf/array/map type differs from the kept target type —
+        // cast the data to the target type (Spark Cast handles nested element casting).
+        sourceCol.cast(targetField.dataType).as(targetField.name)
       case _ =>
         sourceCol.as(targetField.name)
     }

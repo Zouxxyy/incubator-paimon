@@ -45,6 +45,7 @@ public class SchemaMergingUtils {
     public static TableSchema mergeSchemas(
             TableSchema currentTableSchema,
             RowType targetType,
+            boolean typeWidening,
             boolean allowExplicitCast,
             boolean caseSensitive) {
         RowType currentType = currentTableSchema.logicalRowType();
@@ -55,7 +56,12 @@ public class SchemaMergingUtils {
         AtomicInteger highestFieldId = new AtomicInteger(currentTableSchema.highestFieldId());
         RowType newRowType =
                 mergeSchemas(
-                        currentType, targetType, highestFieldId, allowExplicitCast, caseSensitive);
+                        currentType,
+                        targetType,
+                        highestFieldId,
+                        typeWidening,
+                        allowExplicitCast,
+                        caseSensitive);
         if (newRowType.equals(currentType)) {
             // It happens if the `targetType` only changes `nullability` but we always respect the
             // current's.
@@ -76,10 +82,17 @@ public class SchemaMergingUtils {
             RowType tableSchema,
             RowType dataSchema,
             AtomicInteger highestFieldId,
+            boolean typeWidening,
             boolean allowExplicitCast,
             boolean caseSensitive) {
         return (RowType)
-                merge(tableSchema, dataSchema, highestFieldId, allowExplicitCast, caseSensitive);
+                merge(
+                        tableSchema,
+                        dataSchema,
+                        highestFieldId,
+                        typeWidening,
+                        allowExplicitCast,
+                        caseSensitive);
     }
 
     /**
@@ -98,6 +111,7 @@ public class SchemaMergingUtils {
             DataType base0,
             DataType update0,
             AtomicInteger highestFieldId,
+            boolean typeWidening,
             boolean allowExplicitCast,
             boolean caseSensitive) {
         // Here we try to merge the base0 and update0 without regard to the nullability,
@@ -120,6 +134,7 @@ public class SchemaMergingUtils {
                                     baseField.type(),
                                     updateField.type(),
                                     highestFieldId,
+                                    typeWidening,
                                     allowExplicitCast,
                                     caseSensitive);
                     updatedFields.add(
@@ -149,12 +164,14 @@ public class SchemaMergingUtils {
                             ((MapType) base).getKeyType(),
                             ((MapType) update).getKeyType(),
                             highestFieldId,
+                            typeWidening,
                             allowExplicitCast,
                             caseSensitive),
                     merge(
                             ((MapType) base).getValueType(),
                             ((MapType) update).getValueType(),
                             highestFieldId,
+                            typeWidening,
                             allowExplicitCast,
                             caseSensitive));
         } else if (base instanceof ArrayType && update instanceof ArrayType) {
@@ -164,6 +181,7 @@ public class SchemaMergingUtils {
                             ((ArrayType) base).getElementType(),
                             ((ArrayType) update).getElementType(),
                             highestFieldId,
+                            typeWidening,
                             allowExplicitCast,
                             caseSensitive));
         } else if (base instanceof MultisetType && update instanceof MultisetType) {
@@ -173,8 +191,15 @@ public class SchemaMergingUtils {
                             ((MultisetType) base).getElementType(),
                             ((MultisetType) update).getElementType(),
                             highestFieldId,
+                            typeWidening,
                             allowExplicitCast,
                             caseSensitive));
+        } else if (!typeWidening) {
+            // Type widening disabled (default): keep the existing (base/target) leaf type. Data is
+            // cast to the target type later by the alignment layer (Spark Cast). Only column
+            // additions evolve the schema; existing columns never change type. This mirrors Delta's
+            // default (delta.enableTypeWidening=false).
+            return base0;
         } else if (base instanceof DecimalType && update instanceof DecimalType) {
             if (((DecimalType) base).getScale() == ((DecimalType) update).getScale()) {
                 return new DecimalType(

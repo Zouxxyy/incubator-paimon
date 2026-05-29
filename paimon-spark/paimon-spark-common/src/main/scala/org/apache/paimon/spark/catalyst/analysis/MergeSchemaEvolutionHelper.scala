@@ -77,15 +77,24 @@ trait MergeSchemaEvolutionHelper extends ExpressionHelper {
     }
 
     val fileStoreTable = v2Table.getTable.asInstanceOf[FileStoreTable]
+    // Pass the raw source types. The core merge (SchemaMergingUtils) decides whether to keep the
+    // existing target type (typeWidening=false, default) or widen it (typeWidening=true); incoming
+    // values are cast to the resulting target type by the action alignment layer.
     val sourceSchema = StructType(
       merge.sourceTable.output
         .filter(a => scopedNames.exists(n => resolver(n, a.name)))
         .map(a => StructField(a.name, a.dataType, a.nullable)))
     val filteredSourceSchema = SparkSystemColumns.filterSparkSystemColumns(sourceSchema)
     val allowExplicitCast = OptionUtils.writeMergeSchemaExplicitCastEnabled()
+    val typeWidening = OptionUtils.writeMergeSchemaTypeWideningEnabled()
     val caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
     val updatedFileStoreTable = SchemaHelper
-      .mergeAndCommitSchema(fileStoreTable, filteredSourceSchema, allowExplicitCast, caseSensitive)
+      .mergeAndCommitSchema(
+        fileStoreTable,
+        filteredSourceSchema,
+        typeWidening,
+        allowExplicitCast,
+        caseSensitive)
       .getOrElse(return None)
 
     // Invalidate Spark catalog cache so subsequent queries see the new schema.

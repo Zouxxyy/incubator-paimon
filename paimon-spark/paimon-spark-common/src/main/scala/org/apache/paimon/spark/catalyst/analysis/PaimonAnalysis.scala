@@ -22,12 +22,14 @@ import org.apache.paimon.spark.{SparkConnectorOptions, SparkTable}
 import org.apache.paimon.spark.catalyst.Compatibility
 import org.apache.paimon.spark.catalyst.analysis.PaimonRelation.isPaimonTable
 import org.apache.paimon.spark.catalyst.plans.logical.PaimonDropPartitions
-import org.apache.paimon.spark.commands.{PaimonAnalyzeTableColumnCommand, PaimonDynamicPartitionOverwriteCommand, PaimonShowColumnsCommand}
+import org.apache.paimon.spark.commands.{PaimonAnalyzeTableColumnCommand, PaimonDynamicPartitionOverwriteCommand, PaimonShowColumnsCommand, SchemaHelper}
+import org.apache.paimon.spark.schema.SparkSystemColumns
 import org.apache.paimon.spark.util.OptionUtils
 import org.apache.paimon.table.FileStoreTable
 
 import org.apache.spark.sql.{PaimonUtils, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedTable}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -46,9 +48,39 @@ class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
       val mergeSchemaEnabled =
         writeOptions(a).get(SparkConnectorOptions.MERGE_SCHEMA.key()).contains("true") ||
           OptionUtils.writeMergeSchemaEnabled()
+      // Like Delta's analysis-time finalSchema: compute the post-evolution schema so that the
+      // resolver casts data to the evolved types (not the old target types). This enables
+      // type-widening for catalog INSERT/saveAsTable when type-widening=true.
+      val expected = if (mergeSchemaEnabled && a.isByName) {
+        val opts = writeOptions(a)
+        table.table.asInstanceOf[SparkTable].getTable match {
+          case fileStoreTable: FileStoreTable =>
+            val dataSchema = SparkSystemColumns.filterSparkSystemColumns(a.query.schema)
+            val allowExplicitCast =
+              opts.get(SparkConnectorOptions.EXPLICIT_CAST.key()).contains("true") ||
+                OptionUtils.writeMergeSchemaExplicitCastEnabled()
+            val typeWidening =
+              opts.get(SparkConnectorOptions.TYPE_WIDENING.key()).contains("true") ||
+                OptionUtils.writeMergeSchemaTypeWideningEnabled()
+            val caseSensitive = session.sessionState.conf.caseSensitiveAnalysis
+            SchemaHelper
+              .computeMergedSparkSchema(
+                fileStoreTable,
+                dataSchema,
+                typeWidening,
+                allowExplicitCast,
+                caseSensitive)
+              .map(
+                fs => fs.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()))
+              .getOrElse(table.output)
+          case _ => table.output
+        }
+      } else {
+        table.output
+      }
       val newQuery = PaimonOutputResolver.resolveOutputColumns(
         table.name,
-        table.output,
+        expected,
         a.query,
         a.isByName,
         mergeSchemaEnabled)

@@ -597,6 +597,7 @@ abstract class DataFrameWriteTestBase extends PaimonSparkTestBase {
                   .format("paimon")
                   .mode("append")
                   .option("write.merge-schema", "true")
+                  .option("write.merge-schema.type-widening", "true")
                   .save(location)
                 val expected3 = if (hasPk) {
                   Row(1L, "a2", BigDecimal.decimal(123), Map("k" -> 11.1)) :: Row(
@@ -641,6 +642,7 @@ abstract class DataFrameWriteTestBase extends PaimonSparkTestBase {
                   .format("paimon")
                   .mode("append")
                   .option("write.merge-schema", "true")
+                  .option("write.merge-schema.type-widening", "true")
                   .save(location)
                 val expected4 =
                   expected3 ++ Seq(Row(99L, "df4", BigDecimal.decimal(4.0), Map("4" -> 4.1)))
@@ -712,19 +714,21 @@ abstract class DataFrameWriteTestBase extends PaimonSparkTestBase {
               "c",
               "d")
 
-            // throw UnsupportedOperationException if write.merge-schema.explicit-cast = false
+            // throw UnsupportedOperationException when type-widening is on but explicit-cast = false
             assertThrows[UnsupportedOperationException] {
               df3.write
                 .format("paimon")
                 .mode("append")
                 .option("write.merge-schema", "true")
+                .option("write.merge-schema.type-widening", "true")
                 .save(location)
             }
-            // merge schema and write data when write.merge-schema.explicit-cast = true
+            // merge schema and write data when type-widening + explicit-cast = true
             df3.write
               .format("paimon")
               .mode("append")
               .option("write.merge-schema", "true")
+              .option("write.merge-schema.type-widening", "true")
               .option("write.merge-schema.explicit-cast", "true")
               .save(location)
             val expected3 = if (hasPk) {
