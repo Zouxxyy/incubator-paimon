@@ -36,7 +36,17 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** The util class for merging the schemas. */
+/**
+ * Schema merging utilities for schema evolution on write.
+ *
+ * <p>Key behavior controlled by {@code typeWidening}:
+ *
+ * <ul>
+ *   <li>{@code false} (default): existing column types are preserved; only new columns are added.
+ *   <li>{@code true}: existing columns may widen (INT→BIGINT etc) if the cast is safe (or explicit
+ *       when {@code allowExplicitCast=true}).
+ * </ul>
+ */
 public class SchemaMergingUtils {
 
     public static final String ARRAY_ELEMENT_FIELD_NAME = "element";
@@ -96,16 +106,17 @@ public class SchemaMergingUtils {
     }
 
     /**
-     * Merge the base data type and the update data type if possible.
+     * Merge the base (target) data type with the update (incoming) data type.
      *
-     * <p>For RowType, find the fields which exists in both the base schema and the update schema,
-     * and try to merge them by calling the method iteratively; remain those fields that are only in
-     * the base schema and append those fields that are only in the update schema.
-     *
-     * <p>For other complex type, try to merge the element types.
-     *
-     * <p>For primitive data type, we treat that's compatible if the original type can be safely
-     * cast to the new type.
+     * <ul>
+     *   <li>RowType: merge existing fields recursively, keep base-only fields, append update-only
+     *       fields as new columns.
+     *   <li>Complex types (Array/Map/Multiset): recursively merge element/value types.
+     *   <li>Leaf types when {@code typeWidening=false} (default): keep the base type unchanged —
+     *       incoming data is cast to it by the alignment layer.
+     *   <li>Leaf types when {@code typeWidening=true}: widen the base type to the update type if
+     *       the cast is safe (or explicit when {@code allowExplicitCast=true}).
+     * </ul>
      */
     public static DataType merge(
             DataType base0,
