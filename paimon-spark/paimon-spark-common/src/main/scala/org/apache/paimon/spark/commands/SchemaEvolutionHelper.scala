@@ -29,6 +29,7 @@ import org.apache.paimon.types.RowType
 
 import org.apache.spark.sql.{DataFrame, PaimonUtils, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.StructType
 
@@ -42,8 +43,9 @@ private[spark] case class SchemaEvolutionFlags(
 
 /**
  * Schema evolution entry points for catalog writes. The two `mergeSchema` overloads commit the
- * evolved schema during analysis/planning; the companion object holds the underlying building
- * blocks (`computeFinalSchema`, `commitSchemaEvolution`, `expectedAttrsForCatalogWrite`).
+ * evolved schema at execution (`WriteIntoPaimonTable.run` for V1, `PaimonV2Write.toBatch` for V2);
+ * the companion object holds the underlying building blocks (`computeFinalSchema`,
+ * `commitSchemaEvolution`, `expectedAttrsForCatalogWrite`).
  */
 private[spark] trait SchemaEvolutionHelper extends WithFileStoreTable {
 
@@ -133,6 +135,50 @@ private[spark] object SchemaEvolutionHelper {
     } else {
       None
     }
+  }
+
+  /**
+   * Persist the schema that MERGE INTO evolved in memory (see [[evolvedTableInMemory]]), and
+   * refresh the catalog cache. Called from the merge command's `run` so the commit happens at
+   * execution, not during analysis. Re-merging the already-evolved schema is a no-op when nothing
+   * changed.
+   */
+  def commitEvolvedSchemaAtExecution(
+      table: FileStoreTable,
+      relation: DataSourceV2Relation,
+      sparkSession: SparkSession): Unit = {
+    if (!OptionUtils.writeMergeSchemaEnabled()) return
+    val evolved = SparkTypeUtils.fromPaimonRowType(table.schema().logicalRowType())
+    commitSchemaEvolution(table, evolved, sparkSession)
+    for (catalog <- relation.catalog; ident <- relation.identifier) {
+      catalog.asInstanceOf[TableCatalog].invalidateTable(ident)
+    }
+  }
+
+  /**
+   * Compute the post-evolution table in memory WITHOUT persisting it (returns `None` if unchanged).
+   * `mergeSchemas` assigns the next schema id deterministically, so the persisting
+   * [[commitSchemaEvolution]] later produces an identical schema. Used by MERGE INTO so the
+   * analyzer can present the new columns in the plan while the actual commit is deferred to
+   * execution.
+   */
+  def evolvedTableInMemory(
+      table: FileStoreTable,
+      dataSchema: StructType,
+      sparkSession: SparkSession,
+      options: Options = new Options()): Option[FileStoreTable] = {
+    val filtered = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
+    val flags = readFlags(sparkSession, options)
+    val dataRowType = SparkTypeUtils.toPaimonType(filtered).asInstanceOf[RowType]
+    val current = table.schema()
+    val merged =
+      SchemaMergingUtils.mergeSchemas(
+        current,
+        dataRowType,
+        flags.typeWidening,
+        flags.allowExplicitCast,
+        flags.caseSensitive)
+    if (merged.equals(current)) None else Some(table.copy(merged))
   }
 
   /** Convert a StructType to fresh AttributeReferences (for use as resolver expected attrs). */
