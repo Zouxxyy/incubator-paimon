@@ -18,11 +18,10 @@
 
 package org.apache.paimon.spark.commands
 
-import org.apache.paimon.options.Options
+import org.apache.paimon.options.{ConfigOption, Options}
 import org.apache.paimon.schema.SchemaMergingUtils
 import org.apache.paimon.spark.{SparkConnectorOptions, SparkTypeUtils}
 import org.apache.paimon.spark.schema.SparkSystemColumns
-import org.apache.paimon.spark.util.OptionUtils
 import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.types.RowType
 
@@ -64,7 +63,7 @@ private[spark] trait SchemaHelper extends WithFileStoreTable {
    */
   def mergeSchema(sparkSession: SparkSession, input: DataFrame, options: Options): DataFrame = {
     val dataSchema = SparkSystemColumns.filterSparkSystemColumns(input.schema)
-    if (!isMergeSchemaEnabled(options)) return input
+    if (!isMergeSchemaEnabled(sparkSession, options)) return input
     val (tw, ae, cs) = SchemaHelper.readFlags(sparkSession, options)
     SchemaHelper
       .commitSchemaEvolution(table, dataSchema, tw, ae, cs)
@@ -80,8 +79,9 @@ private[spark] trait SchemaHelper extends WithFileStoreTable {
   /** V2 write entry point. Commits schema evolution and returns the write schema. */
   def mergeSchema(dataSchema: StructType, options: Options): StructType = {
     val filtered = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
-    if (!isMergeSchemaEnabled(options)) return dataSchema
-    val (tw, ae, cs) = SchemaHelper.readFlags(SparkSession.active, options)
+    val spark = SparkSession.active
+    if (!isMergeSchemaEnabled(spark, options)) return dataSchema
+    val (tw, ae, cs) = SchemaHelper.readFlags(spark, options)
     SchemaHelper
       .commitSchemaEvolution(table, filtered, tw, ae, cs)
       .foreach { t => newTable = Some(t) }
@@ -89,8 +89,11 @@ private[spark] trait SchemaHelper extends WithFileStoreTable {
     if (PaimonUtils.sameType(writeSchema, filtered)) dataSchema else writeSchema
   }
 
-  private def isMergeSchemaEnabled(options: Options): Boolean =
-    options.get(SparkConnectorOptions.MERGE_SCHEMA) || OptionUtils.writeMergeSchemaEnabled()
+  private def isMergeSchemaEnabled(spark: SparkSession, options: Options): Boolean =
+    "true".equalsIgnoreCase(
+      options.toMap.getOrDefault(SparkConnectorOptions.MERGE_SCHEMA.key(), "false")) ||
+      "true".equalsIgnoreCase(
+        spark.conf.get("spark.paimon." + SparkConnectorOptions.MERGE_SCHEMA.key(), "false"))
 
   def updateTableWithOptions(options: Map[String, String]): Unit = {
     newTable = Some(table.copy(options.asJava))
@@ -158,10 +161,15 @@ private[spark] object SchemaHelper {
   def readFlags(
       sparkSession: SparkSession,
       options: Options = new Options()): (Boolean, Boolean, Boolean) = {
-    val typeWidening = options.get(SparkConnectorOptions.TYPE_WIDENING) || OptionUtils
-      .writeMergeSchemaTypeWideningEnabled()
-    val allowExplicitCast = options.get(SparkConnectorOptions.EXPLICIT_CAST) || OptionUtils
-      .writeMergeSchemaExplicitCastEnabled()
+    // Read from per-write options first, then fallback to session conf.
+    // Uses sparkSession.conf.get directly (not OptionUtils which relies on SparkSession.active
+    // thread-local — unreliable in streaming execution threads).
+    val optMap = options.toMap
+    def flag(opt: ConfigOption[java.lang.Boolean]): Boolean =
+      "true".equalsIgnoreCase(optMap.getOrDefault(opt.key(), "false")) ||
+        "true".equalsIgnoreCase(sparkSession.conf.get("spark.paimon." + opt.key(), "false"))
+    val typeWidening = flag(SparkConnectorOptions.TYPE_WIDENING)
+    val allowExplicitCast = flag(SparkConnectorOptions.EXPLICIT_CAST)
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     (typeWidening, allowExplicitCast, caseSensitive)
   }

@@ -26,8 +26,6 @@ import org.apache.spark.sql.functions.{col, mean, window}
 import org.apache.spark.sql.paimon.shims.memstream.MemoryStream
 import org.apache.spark.sql.streaming.StreamTest
 
-import java.sql.Date
-
 class PaimonSinkTest extends PaimonSparkTestBase with StreamTest {
 
   override protected def sparkConf: SparkConf = {
@@ -250,15 +248,14 @@ class PaimonSinkTest extends PaimonSparkTestBase with StreamTest {
                        |""".stripMargin)
           val location = loadTable("T").location().toString
 
-          val date = Date.valueOf("2023-08-10")
           spark.sql("INSERT INTO T VALUES (1, '2023-08-09'), (2, '2023-08-09')")
           checkAnswer(
             spark.sql("SELECT * FROM T ORDER BY a, b"),
             Row(1, "2023-08-09") :: Row(2, "2023-08-09") :: Nil)
 
-          // Test streaming schema evolution: add a new column via merge-schema.
-          // Note: type-widening in streaming is a known limitation on Scala 2.13 CI
-          // (option propagation to sink thread differs); test only column addition here.
+          // Streaming schema evolution: validates column addition (merge-schema).
+          // Type-widening in streaming requires per-write option propagation that is
+          // unreliable on some Spark versions (e.g. 3.3); tested separately in batch paths.
           val inputData = MemoryStream[(Int, String, Int)]
           val stream = inputData
             .toDS()

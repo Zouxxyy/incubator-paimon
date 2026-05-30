@@ -19,7 +19,7 @@
 package org.apache.paimon.spark.sources
 
 import org.apache.paimon.options.Options
-import org.apache.paimon.spark.{InsertInto, Overwrite}
+import org.apache.paimon.spark.{InsertInto, Overwrite, SparkConnectorOptions}
 import org.apache.paimon.spark.commands.{SchemaHelper, WriteIntoPaimonTable}
 import org.apache.paimon.table.FileStoreTable
 
@@ -36,6 +36,24 @@ class PaimonSink(
     options: Options)
   extends Sink
   with SchemaHelper {
+
+  // Propagate schema evolution flags from per-write options to session conf. On some Spark
+  // versions (e.g. 3.3), streaming per-write options may not reliably reach WriteIntoPaimonTable
+  // via the Options object. Session conf is the universal fallback read by SchemaHelper.readFlags.
+  locally {
+    val spark = sqlContext.sparkSession
+    val optMap = options.toMap
+    Seq(
+      SparkConnectorOptions.MERGE_SCHEMA,
+      SparkConnectorOptions.TYPE_WIDENING,
+      SparkConnectorOptions.EXPLICIT_CAST).foreach {
+      opt =>
+        val value = optMap.getOrDefault(opt.key(), null)
+        if (value != null) {
+          spark.conf.set("spark.paimon." + opt.key(), value)
+        }
+    }
+  }
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     val saveMode = if (outputMode == OutputMode.Complete()) {
