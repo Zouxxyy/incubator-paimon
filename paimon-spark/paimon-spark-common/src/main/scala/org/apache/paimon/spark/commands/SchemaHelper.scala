@@ -27,6 +27,7 @@ import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.types.RowType
 
 import org.apache.spark.sql.{Column, DataFrame, PaimonUtils, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.functions.{col, lit, struct, transform, transform_values}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
@@ -148,6 +149,10 @@ private[spark] object SchemaHelper {
         }
     }
   }
+
+  /** Convert a StructType to fresh AttributeReferences (for use as resolver expected attrs). */
+  def toAttributes(schema: StructType): Seq[AttributeReference] =
+    schema.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
   /** Read schema evolution flags (typeWidening, allowExplicitCast, caseSensitive). */
   def readFlags(

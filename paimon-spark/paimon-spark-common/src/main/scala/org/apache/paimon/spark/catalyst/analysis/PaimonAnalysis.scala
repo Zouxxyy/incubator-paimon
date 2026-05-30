@@ -30,7 +30,7 @@ import org.apache.paimon.table.FileStoreTable
 
 import org.apache.spark.sql.{PaimonUtils, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedTable}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -99,7 +99,7 @@ class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
         val (tw, ae, cs) = SchemaHelper.readFlags(session, Options.fromMap(opts.asJava))
         SchemaHelper
           .computeFinalSchema(fst, dataSchema, tw, ae, cs)
-          .map(_.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()))
+          .map(SchemaHelper.toAttributes)
           .getOrElse(table.output)
       case _ => table.output
     }
