@@ -257,32 +257,38 @@ class PaimonSinkTest extends PaimonSparkTestBase with StreamTest {
             Row(1, "2023-08-09") :: Row(2, "2023-08-09") :: Nil)
 
           val inputData = MemoryStream[(Long, Date, Int)]
-          val stream = inputData
-            .toDS()
-            .toDF("a", "b", "c")
-            .writeStream
-            .option("checkpointLocation", checkpointDir.getCanonicalPath)
-            .option("write.merge-schema", "true")
-            .option("write.merge-schema.type-widening", "true")
-            .option("write.merge-schema.explicit-cast", "true")
-            .format("paimon")
-            .start(location)
+          withSparkSQLConf(
+            "spark.paimon.write.merge-schema" -> "true",
+            "spark.paimon.write.merge-schema.type-widening" -> "true",
+            "spark.paimon.write.merge-schema.explicit-cast" -> "true"
+          ) {
+            val stream = inputData
+              .toDS()
+              .toDF("a", "b", "c")
+              .writeStream
+              .option("checkpointLocation", checkpointDir.getCanonicalPath)
+              .option("write.merge-schema", "true")
+              .option("write.merge-schema.type-widening", "true")
+              .option("write.merge-schema.explicit-cast", "true")
+              .format("paimon")
+              .start(location)
 
-          val query = () => spark.sql("SELECT * FROM T ORDER BY a")
+            val query = () => spark.sql("SELECT * FROM T ORDER BY a")
 
-          try {
-            inputData.addData((1L, date, 123), (3L, date, 456))
-            stream.processAllAvailable()
+            try {
+              inputData.addData((1L, date, 123), (3L, date, 456))
+              stream.processAllAvailable()
 
-            checkAnswer(
-              query(),
-              Row(1L, date, 123) :: Row(2L, Date.valueOf("2023-08-09"), null) :: Row(
-                3L,
-                date,
-                456) :: Nil)
-          } finally {
-            stream.stop()
-          }
+              checkAnswer(
+                query(),
+                Row(1L, date, 123) :: Row(2L, Date.valueOf("2023-08-09"), null) :: Row(
+                  3L,
+                  date,
+                  456) :: Nil)
+            } finally {
+              stream.stop()
+            }
+          } // withSparkSQLConf
       }
     }
   }
