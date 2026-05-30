@@ -1,79 +1,63 @@
-# Type Widening Design (Paimon Spark schema-evolution-on-write)
+# Type Widening Design
 
 ## Problem
 
-`merge-schema` coupled column-addition with unconditional type widening in
-`SchemaMergingUtils.merge`, causing:
-1. ARRAY<INT> -> ARRAY<BIGINT> crash (CastExecutors.resolve returns null)
-2. Inconsistent behavior: path-write/MERGE widen, catalog INSERT/saveAsTable don't
-3. `explicit-cast` semantics differ per entry point
+`merge-schema` coupled column-addition with unconditional type widening, causing:
+1. `ARRAY<INT>→ARRAY<BIGINT>` crash (`CastExecutors.resolve` returns null)
+2. Inconsistent behavior across write paths (path-write widens, catalog INSERT doesn't)
 
-## Solution (Implemented)
+## Solution
 
-Mirror Delta's `enableTypeWidening` with an explicit switch:
-`write.merge-schema.type-widening` (default false).
-
-### Core design (SchemaMergingUtils.merge)
-
-When `typeWidening=false` (default): existing column types are KEPT (return base0).
-Only new columns evolve the schema. Data is cast to the target type by the alignment
-layer (Spark Cast in PaimonOutputResolver/alignColumns).
-
-When `typeWidening=true`: existing columns widen to the incoming wider type (original
-behavior). `explicit-cast` is honored only here as a lossy sub-modifier.
-
-### Write path flow (target architecture)
-
-All paths use three building blocks: **computeFinalSchema**, **commitSchemaEvolution**, **alignColumns**.
-Ordering differs by path (catalog: compute→cast→commit; path-write/MERGE: commit→cast).
-
-| Entry | Step 1: finalSchema | Step 3: Cast | Step 2: Commit | Notes |
-|-------|---------------------|--------------|----------------|-------|
-| V1 path-write `save(location)` | `SchemaHelper.mergeSchema(df)` (execution) | `alignColumns` (execution) | execution | Data has raw source types; all 3 steps do real work |
-| V1 catalog `saveAsTable`/INSERT (v2-write=false) | `PaimonAnalysis.computeFinalSchema` (analysis) | `PaimonOutputResolver` (analysis) | `SchemaHelper.mergeSchema(df)` step 2 (execution) | Data pre-cast by resolver; steps 1+3 in mergeSchema(df) are idempotent no-ops |
-| V2 catalog (v2-write=true) | `PaimonAnalysis.computeFinalSchema` (analysis) | `PaimonOutputResolver` (analysis) | `SchemaHelper.mergeSchema(StructType)` (planning, PaimonV2Write constructor) | Data pre-cast by resolver |
-| MERGE INTO | `evolveTargetIfNeeded` → `commitSchemaEvolution` (analysis) | `alignAllMergeActions` (analysis) | analysis (inside evolveTargetIfNeeded) | Schema must be committed before target-read plan is built |
-
-Note: V1 catalog and path-write both call `WriteIntoPaimonTable.run()` → `SchemaHelper.mergeSchema(df)`.
-The difference is whether PaimonOutputResolver already cast the data in analysis (catalog) or not (path).
-
-### Commit timing
-
-- V1 path/catalog: execution (WriteIntoPaimonTable.run -> SchemaHelper.mergeSchema)
-- V2 catalog: planning (PaimonV2Write constructor -> SchemaHelper.mergeSchema)
-- MERGE INTO: analysis (evolveTargetIfNeeded -> SchemaHelper.mergeAndCommitSchema)
-
-MERGE INTO commit cannot easily be deferred to execution because its target-read
-plan depends on the committed schema in the DataSourceV2Relation. Deferring would
-require reconstructing the target relation at execution time — left as follow-up.
-
-### Known limitations
-
-1. `typeWidening=true` + complex element widening (ARRAY<INT> -> ARRAY<BIGINT>)
-   throws at SchemaManager.generateTableSchema (CastExecutors has no ARRAY cast rule).
-   Asserted in test. Follow-up: fix SchemaManager complex-type cast validation.
-
-2. Catalog INSERT typeWidening only works with BY NAME writes. Position-based
-   INSERT INTO ... VALUES uses anonymous column names that cannot be name-matched.
-
-3. V2 write commit remains at planning time (not deferred to execution).
-   Follow-up: move commit to toBatch for full Delta-style deferral.
+Add `write.merge-schema.type-widening` (default `false`, mirrors `delta.enableTypeWidening`).
 
 ## Config
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `write.merge-schema` | false | Enable schema evolution (add columns) |
-| `write.merge-schema.type-widening` | false | Enable type widening for existing columns (only when merge-schema=true) |
-| `write.merge-schema.explicit-cast` | false | Allow lossy type changes (only when type-widening=true) |
+| Option | Default | Semantics |
+|--------|---------|-----------|
+| `write.merge-schema` | `false` | Enable schema evolution (column additions) |
+| `write.merge-schema.type-widening` | `false` | Also allow widening existing column types (only when merge-schema=true) |
+| `write.merge-schema.explicit-cast` | `false` | Also allow lossy type changes (only when type-widening=true) |
 
-## Files changed
+## Core Logic (`SchemaMergingUtils.merge`)
 
-- `paimon-core/.../schema/SchemaMergingUtils.java` — typeWidening param, keep-existing branch
-- `paimon-core/.../schema/SchemaManager.java` — thread typeWidening
-- `paimon-core/.../FileStore.java`, `AbstractFileStore.java`, `PrivilegedFileStore.java` — thread
-- `paimon-spark/.../SparkConnectorOptions.java` — TYPE_WIDENING option
-- `paimon-spark/.../util/OptionUtils.scala` — accessor
-- `paimon-spark/.../commands/SchemaHelper.scala` — thread + computeMergedSparkSchema + alignColumns cast
-- `paimon-spark/.../catalyst/analysis/MergeSchemaEvolutionHelper.scala` — pass typeWidening, raw source types
-- `paimon-spark/.../catalyst/analysis/PaimonAnalysis.scala` — finalSchema as resolver expected (byName)
+```
+typeWidening=false (default) → keep base type for existing columns, return base0
+typeWidening=true            → widen: Decimal precision↑, length↑, supportsCast-safe types
+typeWidening=true + explicit → also allow lossy casts (BIGINT→INT etc)
+New columns                  → always added regardless of typeWidening
+```
+
+## Write Path Architecture
+
+Three building blocks:
+- `SchemaHelper.computeFinalSchema` — pure computation, no side-effects
+- `SchemaHelper.commitSchemaEvolution` — persist schema to storage (idempotent)
+- `SchemaHelper.alignColumns` — cast/reorder DataFrame columns to target schema
+
+### Ordering by path
+
+| Path | Step 1 (compute) | Step 3 (cast) | Step 2 (commit) |
+|------|-------------------|---------------|-----------------|
+| **V1 path-write** `save(location)` | inside `commitSchemaEvolution` | `alignColumns` (execution) | execution (`commitAndGetWriteSchema`) |
+| **V1 catalog** `saveAsTable`/INSERT | `PaimonAnalysis.computeExpectedAttrs` (analysis) | `PaimonOutputResolver` (analysis) | `WriteIntoPaimonTable` → `commitAndGetWriteSchema` (execution) |
+| **V2 catalog** (use-v2-write=true) | `PaimonAnalysis.computeExpectedAttrs` (analysis) | `PaimonOutputResolver` (analysis) | `PaimonV2Write` → `commitAndGetWriteSchema` (planning) |
+| **MERGE INTO** | inside `commitSchemaEvolution` | `alignAllMergeActions` (analysis) | `evolveTargetIfNeeded` (analysis) |
+
+Note: catalog paths compute→cast→commit; path-write/MERGE commit(includes compute)→cast.
+
+## Known Limitations
+
+1. **Complex element widening**: `ARRAY<INT>→ARRAY<BIGINT>` + `type-widening=true` throws
+   (`SchemaManager.generateTableSchema` → `CastExecutors.resolve` = null). Follow-up.
+2. **Position-based INSERT**: `INSERT INTO t VALUES(...)` — anonymous column names can't
+   be name-matched, so `computeFinalSchema` is skipped (only `byName` writes compute it).
+3. **MERGE INTO commit timing**: committed during analysis (not deferred to execution)
+   because the target-read plan depends on the committed schema in the relation.
+
+## Key Files
+
+- `paimon-core/.../schema/SchemaMergingUtils.java` — `merge()` with typeWidening branch
+- `paimon-spark/.../commands/SchemaHelper.scala` — three-step building blocks + trait entry points
+- `paimon-spark/.../catalyst/analysis/PaimonAnalysis.scala` — `computeExpectedAttrs` for catalog write
+- `paimon-spark/.../catalyst/analysis/MergeSchemaEvolutionHelper.scala` — MERGE INTO evolution
+- `paimon-spark/.../SparkConnectorOptions.java` — `TYPE_WIDENING` option
