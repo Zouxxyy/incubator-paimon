@@ -34,11 +34,11 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, St
 import scala.collection.JavaConverters._
 
 /**
- * Schema evolution helper for write paths. All paths follow:
+ * Schema evolution for write paths. All paths follow:
  * {{{
- *   Step 1: computeFinalSchema  — what the table schema should become
- *   Step 2: commitSchemaEvolution — persist the new schema
- *   Step 3: alignColumns — cast/reorder data to match the committed schema
+ *   Step 1: computeFinalSchema  — determine what the table schema should become
+ *   Step 2: commitSchemaEvolution — persist the evolved schema
+ *   Step 3: alignColumns — cast/reorder data to match the evolved schema
  * }}}
  *
  * @see
@@ -53,56 +53,26 @@ private[spark] trait SchemaHelper extends WithFileStoreTable with Logging {
   override def table: FileStoreTable = newTable.getOrElse(originTable)
 
   /**
-   * V1 write entry point. Called from [[WriteIntoPaimonTable.run()]] for BOTH:
-   *   - path-write (save(location)): data has raw source types → all three steps do real work.
-   *   - catalog write (saveAsTable/INSERT, use-v2-write=false): data arrives already cast by
-   *     PaimonOutputResolver (analysis phase) → steps 1+3 are idempotent no-ops, only step 2
-   *     (commit) persists the schema.
-   *
-   * Flow: compute finalSchema → commit → align data.
+   * V1 write entry point (WriteIntoPaimonTable.run). Handles both:
+   *   - path-write (save(location)): data has raw source types, all steps do real work.
+   *   - catalog write (saveAsTable/INSERT, v2-write=false): data pre-cast by PaimonOutputResolver,
+   *     commit is the only step that does real work (compute + align are idempotent).
    */
   def mergeSchema(sparkSession: SparkSession, input: DataFrame, options: Options): DataFrame = {
-    logDebug(
-      s"[SchemaHelper] mergeSchema(DataFrame) entry, table=${table.name()}, " +
-        s"dataSchema=${input.schema.simpleString}")
     val dataSchema = SparkSystemColumns.filterSparkSystemColumns(input.schema)
-    val mergeSchemaEnabled =
-      options.get(SparkConnectorOptions.MERGE_SCHEMA) || OptionUtils.writeMergeSchemaEnabled()
-    if (!mergeSchemaEnabled) {
-      return input
+    evolveSchema(sparkSession, dataSchema, options) match {
+      case Some(writeSchema) =>
+        logDebug(
+          s"[SchemaHelper] V1 align: ${dataSchema.simpleString} → ${writeSchema.simpleString}")
+        val resolve = sparkSession.sessionState.conf.resolver
+        input.select(SchemaHelper.alignColumns(writeSchema, dataSchema, resolve): _*)
+      case None => input
     }
-
-    val filteredDataSchema = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
-    val (typeWidening, allowExplicitCast, caseSensitive) =
-      SchemaHelper.readFlags(sparkSession, options)
-
-    // Step 1: Compute finalSchema
-    val finalSchema = SchemaHelper
-      .computeFinalSchema(table, filteredDataSchema, typeWidening, allowExplicitCast, caseSensitive)
-      .getOrElse(return input)
-
-    // Step 2: Commit schema evolution
-    SchemaHelper
-      .commitSchemaEvolution(
-        table,
-        filteredDataSchema,
-        typeWidening,
-        allowExplicitCast,
-        caseSensitive)
-      .foreach { updatedTable => newTable = Some(updatedTable) }
-
-    // Step 3: Align/cast data to finalSchema
-    val resolve = sparkSession.sessionState.conf.resolver
-    val cols = SchemaHelper.alignColumns(finalSchema, dataSchema, resolve)
-    input.select(cols: _*)
   }
 
   /**
-   * V2 catalog write entry point (PaimonV2Write constructor, use-v2-write=true). Returns the schema
-   * the writer should use.
-   *
-   * Flow: steps 1+2 (compute + commit). Step 3 (cast) was already done by PaimonOutputResolver
-   * during the analysis phase, so data reaching the writer is already aligned to finalSchema.
+   * V2 write entry point (PaimonV2Write constructor). Returns the write schema. Cast was already
+   * done by PaimonOutputResolver in the analysis phase.
    */
   def mergeSchema(dataSchema: StructType, options: Options): StructType = {
     mergeSchema(SparkSession.active, dataSchema, options)
@@ -112,35 +82,31 @@ private[spark] trait SchemaHelper extends WithFileStoreTable with Logging {
       sparkSession: SparkSession,
       dataSchema: StructType,
       options: Options): StructType = {
-    logDebug(
-      s"[SchemaHelper] mergeSchema(StructType) entry, table=${table.name()}, " +
-        s"dataSchema=${dataSchema.simpleString}")
+    val filtered = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
+    evolveSchema(sparkSession, filtered, options).getOrElse(dataSchema)
+  }
+
+  /**
+   * Core: commit schema evolution and return the write schema if it changed. Single pass — no
+   * redundant re-computation.
+   */
+  private def evolveSchema(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      options: Options): Option[StructType] = {
     val mergeSchemaEnabled =
       options.get(SparkConnectorOptions.MERGE_SCHEMA) || OptionUtils.writeMergeSchemaEnabled()
-    if (!mergeSchemaEnabled) {
-      return dataSchema
-    }
+    if (!mergeSchemaEnabled) return None
 
-    val filteredDataSchema = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
     val (typeWidening, allowExplicitCast, caseSensitive) =
       SchemaHelper.readFlags(sparkSession, options)
 
-    // Steps 1+2: compute finalSchema + commit (cast already done by PaimonOutputResolver)
     SchemaHelper
-      .commitSchemaEvolution(
-        table,
-        filteredDataSchema,
-        typeWidening,
-        allowExplicitCast,
-        caseSensitive)
+      .commitSchemaEvolution(table, dataSchema, typeWidening, allowExplicitCast, caseSensitive)
       .foreach { updatedTable => newTable = Some(updatedTable) }
 
     val writeSchema = SparkTypeUtils.fromPaimonRowType(table.schema().logicalRowType())
-    if (!PaimonUtils.sameType(writeSchema, filteredDataSchema)) {
-      writeSchema
-    } else {
-      filteredDataSchema
-    }
+    if (!PaimonUtils.sameType(writeSchema, dataSchema)) Some(writeSchema) else None
   }
 
   def updateTableWithOptions(options: Map[String, String]): Unit = {
@@ -151,13 +117,9 @@ private[spark] trait SchemaHelper extends WithFileStoreTable with Logging {
 private[spark] object SchemaHelper {
 
   // ---------------------------------------------------------------------------
-  // Step 1: Compute the post-evolution schema (mirrors Delta's analysis-time finalSchema)
+  // Step 1: Compute the post-evolution schema (used by PaimonAnalysis at analysis time)
   // ---------------------------------------------------------------------------
 
-  /**
-   * Compute the merged schema WITHOUT committing. Returns Some(evolvedSchema) if it differs from
-   * the table's current schema, None otherwise.
-   */
   def computeFinalSchema(
       table: FileStoreTable,
       dataSchema: StructType,
@@ -173,21 +135,14 @@ private[spark] object SchemaHelper {
         typeWidening,
         allowExplicitCast,
         caseSensitive)
-    if (merged.logicalRowType() == current.logicalRowType()) {
-      None
-    } else {
-      Some(SparkTypeUtils.fromPaimonRowType(merged.logicalRowType()))
-    }
+    if (merged.logicalRowType() == current.logicalRowType()) None
+    else Some(SparkTypeUtils.fromPaimonRowType(merged.logicalRowType()))
   }
 
   // ---------------------------------------------------------------------------
-  // Step 2: Commit the schema evolution
+  // Step 2: Commit the schema evolution (idempotent)
   // ---------------------------------------------------------------------------
 
-  /**
-   * Merge the dataSchema into the table's schema and commit. Idempotent: if the schema already
-   * matches, returns None and no commit happens.
-   */
   def commitSchemaEvolution(
       table: FileStoreTable,
       dataSchema: StructType,
@@ -206,10 +161,6 @@ private[spark] object SchemaHelper {
   // Step 3: Align/cast data to the target schema
   // ---------------------------------------------------------------------------
 
-  /**
-   * Recursively align columns from dataSchema to targetSchema by name. For nested struct fields,
-   * reorder and fill nulls for missing sub-fields. Leaf type mismatches are cast.
-   */
   def alignColumns(
       targetSchema: StructType,
       dataSchema: StructType,
@@ -229,7 +180,6 @@ private[spark] object SchemaHelper {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  /** Read schema evolution flags from options + session conf. */
   def readFlags(sparkSession: SparkSession, options: Options): (Boolean, Boolean, Boolean) = {
     val typeWidening = options.get(SparkConnectorOptions.TYPE_WIDENING) || OptionUtils
       .writeMergeSchemaTypeWideningEnabled()
@@ -249,9 +199,8 @@ private[spark] object SchemaHelper {
         alignStruct(sourceCol, s, t, resolve).as(targetField.name)
       case (ArrayType(s: StructType, _), ArrayType(t: StructType, _))
           if !PaimonUtils.sameType(s, t) =>
-        transform(sourceCol, elem => alignStruct(elem, s, t, resolve))
-          .as(targetField.name)
-      case (MapType(sKey, sVal: StructType, _), MapType(tKey, tVal: StructType, _))
+        transform(sourceCol, elem => alignStruct(elem, s, t, resolve)).as(targetField.name)
+      case (MapType(_, sVal: StructType, _), MapType(_, tVal: StructType, _))
           if !PaimonUtils.sameType(sVal, tVal) =>
         transform_values(sourceCol, (_, v) => alignStruct(v, sVal, tVal, resolve))
           .as(targetField.name)
