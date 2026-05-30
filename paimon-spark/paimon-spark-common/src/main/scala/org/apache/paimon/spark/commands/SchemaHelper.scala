@@ -98,10 +98,7 @@ private[spark] trait SchemaHelper extends WithFileStoreTable {
 
 private[spark] object SchemaHelper {
 
-  // ---------------------------------------------------------------------------
-  // Step 1: Compute the post-evolution schema (used by PaimonAnalysis at analysis time)
-  // ---------------------------------------------------------------------------
-
+  /** Step 1: Compute the post-evolution schema without committing (used by PaimonAnalysis). */
   def computeFinalSchema(
       table: FileStoreTable,
       dataSchema: StructType,
@@ -121,10 +118,7 @@ private[spark] object SchemaHelper {
     else Some(SparkTypeUtils.fromPaimonRowType(merged.logicalRowType()))
   }
 
-  // ---------------------------------------------------------------------------
-  // Step 2: Commit the schema evolution (idempotent)
-  // ---------------------------------------------------------------------------
-
+  /** Step 2: Commit the schema evolution (idempotent — no-op if schema unchanged). */
   def commitSchemaEvolution(
       table: FileStoreTable,
       dataSchema: StructType,
@@ -139,10 +133,7 @@ private[spark] object SchemaHelper {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Step 3: Align/cast data to the target schema
-  // ---------------------------------------------------------------------------
-
+  /** Step 3: Align/cast DataFrame columns to the target schema by name. */
   def alignColumns(
       targetSchema: StructType,
       dataSchema: StructType,
@@ -158,20 +149,10 @@ private[spark] object SchemaHelper {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-
-  /** Read flags from session conf only (no per-write options). Used by MERGE INTO path. */
-  def readFlags(sparkSession: SparkSession): (Boolean, Boolean, Boolean) = {
-    (
-      OptionUtils.writeMergeSchemaTypeWideningEnabled(),
-      OptionUtils.writeMergeSchemaExplicitCastEnabled(),
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-  }
-
-  /** Read flags from both per-write options and session conf. Used by INSERT/write paths. */
-  def readFlags(sparkSession: SparkSession, options: Options): (Boolean, Boolean, Boolean) = {
+  /** Read schema evolution flags (typeWidening, allowExplicitCast, caseSensitive). */
+  def readFlags(
+      sparkSession: SparkSession,
+      options: Options = new Options()): (Boolean, Boolean, Boolean) = {
     val typeWidening = options.get(SparkConnectorOptions.TYPE_WIDENING) || OptionUtils
       .writeMergeSchemaTypeWideningEnabled()
     val allowExplicitCast = options.get(SparkConnectorOptions.EXPLICIT_CAST) || OptionUtils
