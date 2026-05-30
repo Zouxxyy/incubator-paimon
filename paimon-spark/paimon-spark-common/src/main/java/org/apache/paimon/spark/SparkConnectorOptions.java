@@ -44,16 +44,15 @@ public class SparkConnectorOptions {
                     .booleanType()
                     .defaultValue(false)
                     .withDescription(
-                            "If true, evolve an existing column's type to the incoming wider/compatible type during merge-schema (mirrors Delta's 'delta.enableTypeWidening'). "
-                                    + "When false (default), the existing column type is kept and the incoming data is cast to it; only new columns evolve the schema. "
-                                    + "'write.merge-schema.explicit-cast' is a sub-modifier that is only honored when this is true.");
+                            "If true, widen existing column types to match incoming data "
+                                    + "(e.g. INT→BIGINT). Default false: keep existing types, cast data.");
 
     public static final ConfigOption<Boolean> EXPLICIT_CAST =
             key("write.merge-schema.explicit-cast")
                     .booleanType()
                     .defaultValue(false)
                     .withDescription(
-                            "Only effective when 'write.merge-schema.type-widening' is true. If true, also allow type changes that require explicit (potentially lossy) casting; otherwise only safe widening is allowed.");
+                            "When type-widening is true, also allow lossy type changes (e.g. BIGINT→INT).");
 
     public static final ConfigOption<Boolean> USE_V2_WRITE =
             key("write.use-v2-write")
