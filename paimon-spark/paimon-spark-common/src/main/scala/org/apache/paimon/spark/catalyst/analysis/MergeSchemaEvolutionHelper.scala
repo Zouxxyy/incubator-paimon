@@ -35,11 +35,11 @@ import org.apache.spark.sql.paimon.shims.SparkShimLoader
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
- * Shared MERGE INTO `merge-schema=true` evolution. Triggers on `UPDATE *` / `INSERT *` (via
- * [[PaimonMergeActionTags]]) or on any explicit assignment whose key resolved to a source-bound
- * attribute (via [[PaimonMergeIntoResolver.resolveAssignments]] fallback — that shape is the
- * marker, no extra tag). Evolution is scoped to source columns referenced by matched / not-matched
- * actions; NOT MATCHED BY SOURCE can't reference source columns.
+ * MERGE INTO schema evolution (merge-schema=true). Computes + commits the evolved schema, then
+ * rewrites the merge plan so that action alignment targets the new columns.
+ *
+ * Triggered by `UPDATE *` / `INSERT *` or explicit source-bound assignment keys. Scoped to source
+ * columns referenced in matched/not-matched actions.
  */
 trait MergeSchemaEvolutionHelper extends ExpressionHelper {
 
@@ -101,9 +101,10 @@ trait MergeSchemaEvolutionHelper extends ExpressionHelper {
     }
 
     val updatedV2Table = v2Table.copy(table = updatedFileStoreTable)
-    val mergedSparkSchema =
-      SparkTypeUtils.fromPaimonRowType(updatedFileStoreTable.schema().logicalRowType())
-    val newOutput = buildEvolvedOutput(mergedSparkSchema, relation.output, resolver)
+    val newOutput = buildEvolvedOutput(
+      SparkTypeUtils.fromPaimonRowType(updatedFileStoreTable.schema().logicalRowType()),
+      relation.output,
+      resolver)
     val updatedRelation =
       SparkShimLoader.shim.copyDataSourceV2Relation(relation, updatedV2Table, newOutput)
     val updatedTargetTable = merge.targetTable.transform {
