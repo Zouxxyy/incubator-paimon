@@ -24,7 +24,8 @@ behavior). `explicit-cast` is honored only here as a lossy sub-modifier.
 
 ### Write path flow (target architecture)
 
-All paths follow: **compute finalSchema → cast data to finalSchema → commit schema**
+All paths use three building blocks: **computeFinalSchema**, **commitSchemaEvolution**, **alignColumns**.
+Ordering differs by path (catalog: compute→cast→commit; path-write/MERGE: commit→cast).
 
 | Entry | Step 1: finalSchema | Step 3: Cast | Step 2: Commit | Notes |
 |-------|---------------------|--------------|----------------|-------|

@@ -34,12 +34,16 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, St
 import scala.collection.JavaConverters._
 
 /**
- * Schema evolution for write paths. All paths follow:
+ * Schema evolution for write paths. Three building blocks:
  * {{{
- *   Step 1: computeFinalSchema  — determine what the table schema should become
- *   Step 2: commitSchemaEvolution — persist the evolved schema
- *   Step 3: alignColumns — cast/reorder data to match the evolved schema
+ *   computeFinalSchema   — determine what the table schema should become (no side-effects)
+ *   commitSchemaEvolution — persist the evolved schema to storage (idempotent)
+ *   alignColumns          — cast/reorder data columns to match the evolved schema
  * }}}
+ *
+ * Ordering differs by path:
+ *   - catalog write (V1/V2): compute(analysis) → cast(analysis) → commit(execution/planning)
+ *   - path-write / MERGE: commit(includes compute, execution/analysis) → cast
  *
  * @see
  *   docs/type-widening-design.md "Write path flow" table
@@ -60,7 +64,7 @@ private[spark] trait SchemaHelper extends WithFileStoreTable with Logging {
    */
   def mergeSchema(sparkSession: SparkSession, input: DataFrame, options: Options): DataFrame = {
     val dataSchema = SparkSystemColumns.filterSparkSystemColumns(input.schema)
-    evolveSchema(sparkSession, dataSchema, options) match {
+    commitAndGetWriteSchema(sparkSession, dataSchema, options) match {
       case Some(writeSchema) =>
         logDebug(
           s"[SchemaHelper] V1 align: ${dataSchema.simpleString} → ${writeSchema.simpleString}")
@@ -83,14 +87,11 @@ private[spark] trait SchemaHelper extends WithFileStoreTable with Logging {
       dataSchema: StructType,
       options: Options): StructType = {
     val filtered = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
-    evolveSchema(sparkSession, filtered, options).getOrElse(dataSchema)
+    commitAndGetWriteSchema(sparkSession, filtered, options).getOrElse(dataSchema)
   }
 
-  /**
-   * Core: commit schema evolution and return the write schema if it changed. Single pass — no
-   * redundant re-computation.
-   */
-  private def evolveSchema(
+  /** Commit schema evolution and return the write schema if it changed (None = no evolution). */
+  private def commitAndGetWriteSchema(
       sparkSession: SparkSession,
       dataSchema: StructType,
       options: Options): Option[StructType] = {
