@@ -64,7 +64,7 @@ class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
                 OptionUtils.writeMergeSchemaTypeWideningEnabled()
             val caseSensitive = session.sessionState.conf.caseSensitiveAnalysis
             SchemaHelper
-              .computeMergedSparkSchema(
+              .computeFinalSchema(
                 fileStoreTable,
                 dataSchema,
                 typeWidening,

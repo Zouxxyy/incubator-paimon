@@ -24,14 +24,17 @@ behavior). `explicit-cast` is honored only here as a lossy sub-modifier.
 
 ### Write path flow (target architecture)
 
-All paths follow: **compute finalSchema -> cast data to finalSchema -> commit schema**
+All paths follow: **compute finalSchema → cast data to finalSchema → commit schema**
 
-| Entry | finalSchema computation | Cast | Commit |
-|-------|------------------------|------|--------|
-| V1 path-write `save(location)` | SchemaHelper.mergeSchema (execution) | alignColumns | execution |
-| V1 catalog `saveAsTable` / SQL INSERT | PaimonAnalysis (analysis, byName only) | PaimonOutputResolver | execution (WriteIntoPaimonTable) |
-| V2 catalog | PaimonAnalysis (analysis, byName only) | PaimonOutputResolver | planning (PaimonV2Write) |
-| MERGE INTO | evolveTargetIfNeeded (analysis) | alignAllMergeActions | analysis (commit in evolve) |
+| Entry | Step 1: finalSchema | Step 3: Cast | Step 2: Commit | Notes |
+|-------|---------------------|--------------|----------------|-------|
+| V1 path-write `save(location)` | `SchemaHelper.mergeSchema(df)` (execution) | `alignColumns` (execution) | execution | Data has raw source types; all 3 steps do real work |
+| V1 catalog `saveAsTable`/INSERT (v2-write=false) | `PaimonAnalysis.computeFinalSchema` (analysis) | `PaimonOutputResolver` (analysis) | `SchemaHelper.mergeSchema(df)` step 2 (execution) | Data pre-cast by resolver; steps 1+3 in mergeSchema(df) are idempotent no-ops |
+| V2 catalog (v2-write=true) | `PaimonAnalysis.computeFinalSchema` (analysis) | `PaimonOutputResolver` (analysis) | `SchemaHelper.mergeSchema(StructType)` (planning, PaimonV2Write constructor) | Data pre-cast by resolver |
+| MERGE INTO | `evolveTargetIfNeeded` → `commitSchemaEvolution` (analysis) | `alignAllMergeActions` (analysis) | analysis (inside evolveTargetIfNeeded) | Schema must be committed before target-read plan is built |
+
+Note: V1 catalog and path-write both call `WriteIntoPaimonTable.run()` → `SchemaHelper.mergeSchema(df)`.
+The difference is whether PaimonOutputResolver already cast the data in analysis (catalog) or not (path).
 
 ### Commit timing
 

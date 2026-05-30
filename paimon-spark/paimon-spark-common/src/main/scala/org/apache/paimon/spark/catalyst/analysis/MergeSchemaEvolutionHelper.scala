@@ -89,7 +89,7 @@ trait MergeSchemaEvolutionHelper extends ExpressionHelper {
     val typeWidening = OptionUtils.writeMergeSchemaTypeWideningEnabled()
     val caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
     val updatedFileStoreTable = SchemaHelper
-      .mergeAndCommitSchema(
+      .commitSchemaEvolution(
         fileStoreTable,
         filteredSourceSchema,
         typeWidening,
