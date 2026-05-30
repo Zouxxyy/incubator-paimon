@@ -63,39 +63,33 @@ private[spark] trait SchemaHelper extends WithFileStoreTable {
    */
   def mergeSchema(sparkSession: SparkSession, input: DataFrame, options: Options): DataFrame = {
     val dataSchema = SparkSystemColumns.filterSparkSystemColumns(input.schema)
-    commitAndGetWriteSchema(sparkSession, dataSchema, options) match {
-      case Some(writeSchema) =>
-        val resolve = sparkSession.sessionState.conf.resolver
-        input.select(SchemaHelper.alignColumns(writeSchema, dataSchema, resolve): _*)
-      case None => input
+    if (!isMergeSchemaEnabled(options)) return input
+    val (tw, ae, cs) = SchemaHelper.readFlags(sparkSession, options)
+    SchemaHelper
+      .commitSchemaEvolution(table, dataSchema, tw, ae, cs)
+      .foreach { t => newTable = Some(t) }
+    val writeSchema = SparkTypeUtils.fromPaimonRowType(table.schema().logicalRowType())
+    if (PaimonUtils.sameType(writeSchema, dataSchema)) input
+    else {
+      val resolve = sparkSession.sessionState.conf.resolver
+      input.select(SchemaHelper.alignColumns(writeSchema, dataSchema, resolve): _*)
     }
   }
 
   /** V2 write entry point. Commits schema evolution and returns the write schema. */
   def mergeSchema(dataSchema: StructType, options: Options): StructType = {
     val filtered = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
-    commitAndGetWriteSchema(SparkSession.active, filtered, options).getOrElse(dataSchema)
-  }
-
-  /** Commit schema evolution and return the write schema if it changed (None = no evolution). */
-  private def commitAndGetWriteSchema(
-      sparkSession: SparkSession,
-      dataSchema: StructType,
-      options: Options): Option[StructType] = {
-    val mergeSchemaEnabled =
-      options.get(SparkConnectorOptions.MERGE_SCHEMA) || OptionUtils.writeMergeSchemaEnabled()
-    if (!mergeSchemaEnabled) return None
-
-    val (typeWidening, allowExplicitCast, caseSensitive) =
-      SchemaHelper.readFlags(sparkSession, options)
-
+    if (!isMergeSchemaEnabled(options)) return dataSchema
+    val (tw, ae, cs) = SchemaHelper.readFlags(SparkSession.active, options)
     SchemaHelper
-      .commitSchemaEvolution(table, dataSchema, typeWidening, allowExplicitCast, caseSensitive)
-      .foreach { updatedTable => newTable = Some(updatedTable) }
-
+      .commitSchemaEvolution(table, filtered, tw, ae, cs)
+      .foreach { t => newTable = Some(t) }
     val writeSchema = SparkTypeUtils.fromPaimonRowType(table.schema().logicalRowType())
-    if (!PaimonUtils.sameType(writeSchema, dataSchema)) Some(writeSchema) else None
+    if (PaimonUtils.sameType(writeSchema, filtered)) dataSchema else writeSchema
   }
+
+  private def isMergeSchemaEnabled(options: Options): Boolean =
+    options.get(SparkConnectorOptions.MERGE_SCHEMA) || OptionUtils.writeMergeSchemaEnabled()
 
   def updateTableWithOptions(options: Map[String, String]): Unit = {
     newTable = Some(table.copy(options.asJava))
