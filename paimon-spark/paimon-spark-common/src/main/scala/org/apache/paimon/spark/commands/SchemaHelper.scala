@@ -26,7 +26,6 @@ import org.apache.paimon.spark.util.OptionUtils
 import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.types.RowType
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, PaimonUtils, SparkSession}
 import org.apache.spark.sql.functions.{col, lit, struct, transform, transform_values}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
@@ -48,7 +47,7 @@ import scala.collection.JavaConverters._
  * @see
  *   docs/type-widening-design.md "Write path flow" table
  */
-private[spark] trait SchemaHelper extends WithFileStoreTable with Logging {
+private[spark] trait SchemaHelper extends WithFileStoreTable {
 
   val originTable: FileStoreTable
 
@@ -66,28 +65,16 @@ private[spark] trait SchemaHelper extends WithFileStoreTable with Logging {
     val dataSchema = SparkSystemColumns.filterSparkSystemColumns(input.schema)
     commitAndGetWriteSchema(sparkSession, dataSchema, options) match {
       case Some(writeSchema) =>
-        logDebug(
-          s"[SchemaHelper] V1 align: ${dataSchema.simpleString} → ${writeSchema.simpleString}")
         val resolve = sparkSession.sessionState.conf.resolver
         input.select(SchemaHelper.alignColumns(writeSchema, dataSchema, resolve): _*)
       case None => input
     }
   }
 
-  /**
-   * V2 write entry point (PaimonV2Write constructor). Returns the write schema. Cast was already
-   * done by PaimonOutputResolver in the analysis phase.
-   */
+  /** V2 write entry point. Commits schema evolution and returns the write schema. */
   def mergeSchema(dataSchema: StructType, options: Options): StructType = {
-    mergeSchema(SparkSession.active, dataSchema, options)
-  }
-
-  def mergeSchema(
-      sparkSession: SparkSession,
-      dataSchema: StructType,
-      options: Options): StructType = {
     val filtered = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
-    commitAndGetWriteSchema(sparkSession, filtered, options).getOrElse(dataSchema)
+    commitAndGetWriteSchema(SparkSession.active, filtered, options).getOrElse(dataSchema)
   }
 
   /** Commit schema evolution and return the write schema if it changed (None = no evolution). */
