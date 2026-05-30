@@ -19,12 +19,11 @@
 package org.apache.paimon.spark.catalyst.analysis
 
 import org.apache.paimon.options.Options
-import org.apache.paimon.spark.{SparkConnectorOptions, SparkTable}
+import org.apache.paimon.spark.SparkTable
 import org.apache.paimon.spark.catalyst.Compatibility
 import org.apache.paimon.spark.catalyst.analysis.PaimonRelation.isPaimonTable
 import org.apache.paimon.spark.catalyst.plans.logical.PaimonDropPartitions
 import org.apache.paimon.spark.commands.{PaimonAnalyzeTableColumnCommand, PaimonDynamicPartitionOverwriteCommand, PaimonShowColumnsCommand, SchemaEvolutionHelper}
-import org.apache.paimon.spark.util.OptionUtils
 import org.apache.paimon.table.FileStoreTable
 
 import org.apache.spark.sql.{PaimonUtils, SparkSession}
@@ -46,15 +45,12 @@ class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
     case a @ PaimonV2WriteCommand(table)
         if !paimonWriteResolved(a.query, table) &&
           a.query.getTagValue(PAIMON_WRITE_RESOLVED).isEmpty =>
-      val opts = writeOptions(a)
-      val mergeSchemaEnabled =
-        opts.get(SparkConnectorOptions.MERGE_SCHEMA.key()).contains("true") ||
-          OptionUtils.writeMergeSchemaEnabled()
+      val options = Options.fromMap(writeOptions(a).asJava)
+      val mergeSchemaEnabled = SchemaEvolutionHelper.mergeSchemaEnabled(options)
       val expected = SchemaEvolutionHelper.expectedAttrsForCatalogWrite(
         table,
         a.query.schema,
-        Options.fromMap(opts.asJava),
-        mergeSchemaEnabled,
+        options,
         a.isByName,
         session)
       val newQuery = PaimonOutputResolver.resolveOutputColumns(

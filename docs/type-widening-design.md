@@ -42,25 +42,31 @@ New columns                  → always added regardless of typeWidening
 
 ## Write Path Architecture
 
-`SchemaEvolutionHelper` (trait + companion object) holds the building blocks:
-- `computeFinalSchema` — pure computation of the post-evolution schema (no side effects)
-- `commitSchemaEvolution` — filter system columns, resolve flags, persist the evolved
-  schema (idempotent; shared by catalog writes and `MERGE INTO`)
+`SchemaEvolutionHelper` (trait + companion object) holds the building blocks, all backed by one
+side-effect-free `computeMergedSchema` primitive (filter system columns → `SchemaMergingUtils.
+mergeSchemas`):
 - `expectedAttrsForCatalogWrite` — the resolver's expected attrs for a catalog write:
   post-evolution attrs when type-widening + `byName`, else `table.output`
-- `toAttributes` / `readFlags` — StructType → attrs; options/conf → `SchemaEvolutionFlags`
+- `evolvedTableInMemory` — the in-memory post-evolution table for MERGE INTO analysis (no persist)
+- `commitSchemaEvolution` / `commitEvolvedSchemaAtExecution` — persist the evolved schema at
+  execution (idempotent; shared by catalog writes and `MERGE INTO`)
+- `mergeSchemaEnabled` — the single enabled-check over per-write options + session conf
 
 ### Ordering by path
 
 | Path | Compute | Cast | Commit |
 |------|---------|------|--------|
-| **V1 catalog** `saveAsTable`/INSERT | `PaimonAnalysis` → `expectedAttrsForCatalogWrite` (analysis) | `PaimonOutputResolver` (analysis) | trait `mergeSchema(DataFrame)` → `commitSchemaEvolution` (execution) |
-| **V2 catalog** (use-v2-write=true) | `PaimonAnalysis` → `expectedAttrsForCatalogWrite` (analysis) | `PaimonOutputResolver` (analysis) | trait `mergeSchema(StructType)` → `commitSchemaEvolution` (planning) |
-| **MERGE INTO** | inside `commitSchemaEvolution` | `alignAllMergeActions` (analysis) | `evolveTargetIfNeeded` (analysis) |
+| **V1 catalog** `saveAsTable`/INSERT | `PaimonAnalysis` → `expectedAttrsForCatalogWrite` (analysis) | `PaimonOutputResolver` (analysis) | trait `mergeSchema(DataFrame)` → `commitSchemaEvolution` (execution, `WriteIntoPaimonTable.run`) |
+| **V2 catalog** (use-v2-write=true) | `PaimonAnalysis` → `expectedAttrsForCatalogWrite` (analysis) | `PaimonOutputResolver` (analysis) | trait `mergeSchema(StructType)` → `commitSchemaEvolution` (execution, `PaimonV2Write.toBatch`) |
+| **MERGE INTO** | `evolveTargetIfNeeded` → `evolvedTableInMemory` (analysis, no persist) | `alignAllMergeActions` (analysis) | `commitEvolvedSchemaAtExecution` (execution, merge command `run`) |
 
-Catalog paths are compute → cast → commit; `MERGE INTO` folds compute into commit,
-then casts. The trait `mergeSchema(DataFrame)` overload returns the input unchanged
-(already cast by the resolver); `mergeSchema(StructType)` returns the write schema.
+Schema migration is always **computed during analysis but committed at execution**,
+so analysis/planning stays side-effect-free (an `EXPLAIN` or re-planned write never
+mutates the table schema). MERGE INTO presents the new columns to the plan via an
+in-memory `FileStoreTable.copy(TableSchema)`; `mergeSchemas` assigns the next schema
+id deterministically, so the execution-time commit reproduces the same schema. The
+trait `mergeSchema(DataFrame)` overload returns the input unchanged (already cast by
+the resolver); `mergeSchema(StructType)` returns the write schema.
 
 ## Known Limitations
 
@@ -74,8 +80,6 @@ then casts. The trait `mergeSchema(DataFrame)` overload returns the input unchan
 3. **Position-based INSERT**: `INSERT INTO t VALUES(...)` — anonymous column names can't
    be name-matched, so `expectedAttrsForCatalogWrite` returns `table.output` (only
    `byName` writes compute the evolved expected attrs).
-4. **MERGE INTO commit timing**: committed during analysis (not deferred to execution)
-   because the target-read plan depends on the committed schema in the relation.
 
 ## Key Files
 

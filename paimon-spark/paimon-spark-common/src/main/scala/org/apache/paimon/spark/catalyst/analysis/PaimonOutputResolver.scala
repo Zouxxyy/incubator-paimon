@@ -20,6 +20,7 @@ package org.apache.paimon.spark.catalyst.analysis
 
 import org.apache.paimon.spark.catalyst.Compatibility
 
+import org.apache.spark.sql.PaimonUtils
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -278,12 +279,12 @@ object PaimonOutputResolver extends SQLConfHelper {
       reorderColumnsByName(
         tableName,
         fields,
-        toAttributes(targetType),
+        PaimonUtils.toAttributes(targetType),
         behavior,
         targetExpr,
         colPath)
     } else {
-      resolveColumnsByPosition(tableName, fields, toAttributes(targetType), colPath)
+      resolveColumnsByPosition(tableName, fields, PaimonUtils.toAttributes(targetType), colPath)
     }
     val targetNamedStruct = CreateStruct(resolved)
     val res = maybeWrapWithNullPreservation(
@@ -471,10 +472,6 @@ object PaimonOutputResolver extends SQLConfHelper {
   private def stripOuterAlias(expr: Expression): Expression = expr match {
     case a: Alias => a.child
     case other => other
-  }
-
-  private def toAttributes(structType: StructType): Seq[Attribute] = {
-    structType.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
   }
 
   private def restoreActualType(attr: Attribute): Attribute = {

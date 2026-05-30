@@ -19,7 +19,7 @@
 package org.apache.paimon.spark.commands
 
 import org.apache.paimon.options.Options
-import org.apache.paimon.schema.SchemaMergingUtils
+import org.apache.paimon.schema.{SchemaMergingUtils, TableSchema}
 import org.apache.paimon.spark.{SparkConnectorOptions, SparkTable, SparkTypeUtils}
 import org.apache.paimon.spark.catalyst.analysis.PaimonOutputResolver
 import org.apache.paimon.spark.schema.SparkSystemColumns
@@ -28,7 +28,8 @@ import org.apache.paimon.table.FileStoreTable
 import org.apache.paimon.types.RowType
 
 import org.apache.spark.sql.{DataFrame, PaimonUtils, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.StructType
 
@@ -42,8 +43,12 @@ private[spark] case class SchemaEvolutionFlags(
 
 /**
  * Schema evolution entry points for catalog writes. The two `mergeSchema` overloads commit the
- * evolved schema during analysis/planning; the companion object holds the underlying building
- * blocks (`computeFinalSchema`, `commitSchemaEvolution`, `expectedAttrsForCatalogWrite`).
+ * evolved schema at execution (`WriteIntoPaimonTable.run` for V1, `PaimonV2Write.toBatch` for V2).
+ *
+ * The companion object holds the schema-evolution primitives shared across write paths:
+ * `expectedAttrsForCatalogWrite` (catalog analysis), `evolvedTableInMemory` (MERGE analysis),
+ * `commitSchemaEvolution` / `commitEvolvedSchemaAtExecution` (persist at execution), and
+ * `mergeSchemaEnabled`.
  */
 private[spark] trait SchemaEvolutionHelper extends WithFileStoreTable {
 
@@ -54,35 +59,37 @@ private[spark] trait SchemaEvolutionHelper extends WithFileStoreTable {
   override def table: FileStoreTable = newTable.getOrElse(originTable)
 
   /**
-   * V1 catalog write entry (`WriteIntoPaimonTable.run`). Data is pre-cast by
-   * [[PaimonOutputResolver]] during analysis, so this just commits the schema and returns the input
-   * unchanged.
+   * V1 catalog write entry (`WriteIntoPaimonTable.run`). The data is already cast to the evolved
+   * schema by [[PaimonOutputResolver]] during analysis, so this only commits the schema.
    */
-  def mergeSchema(sparkSession: SparkSession, input: DataFrame, options: Options): DataFrame = {
-    if (isMergeSchemaEnabled(options)) commitEvolution(sparkSession, input.schema, options)
-    input
-  }
+  def mergeSchema(sparkSession: SparkSession, input: DataFrame, options: Options): Unit =
+    if (SchemaEvolutionHelper.mergeSchemaEnabled(options))
+      commitEvolution(sparkSession, input.schema, options)
 
-  /** V2 catalog write entry (`PaimonV2Write` constructor). Commits and returns the write schema. */
+  /** V2 catalog write entry (`PaimonV2Write.toBatch`). Commits and returns the write schema. */
   def mergeSchema(dataSchema: StructType, options: Options): StructType = {
-    if (!isMergeSchemaEnabled(options)) return dataSchema
-    commitEvolution(SparkSession.active, dataSchema, options)
-    val writeSchema = SparkTypeUtils.fromPaimonRowType(table.schema().logicalRowType())
-    val filtered = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
-    if (PaimonUtils.sameType(writeSchema, filtered)) dataSchema else writeSchema
+    if (!SchemaEvolutionHelper.mergeSchemaEnabled(options)) return dataSchema
+    // Use the commit result (the evolved table, or None when unchanged) directly rather than the
+    // mutable `newTable`, which `updateTableWithOptions` can also set: write against the evolved
+    // schema when the commit changed it, otherwise keep the input schema as-is.
+    commitEvolution(SparkSession.active, dataSchema, options) match {
+      case Some(evolved) => SparkTypeUtils.fromPaimonRowType(evolved.schema().logicalRowType())
+      case None => dataSchema
+    }
   }
 
-  /** Commit the evolved schema for the incoming data, updating `newTable`. */
+  /** Commit the evolved schema for the incoming data; updates `newTable` and returns it. */
   private def commitEvolution(
       sparkSession: SparkSession,
       dataSchema: StructType,
-      options: Options): Unit =
-    SchemaEvolutionHelper
-      .commitSchemaEvolution(table, dataSchema, sparkSession, options)
-      .foreach(t => newTable = Some(t))
-
-  private def isMergeSchemaEnabled(options: Options): Boolean =
-    options.get(SparkConnectorOptions.MERGE_SCHEMA) || OptionUtils.writeMergeSchemaEnabled()
+      options: Options): Option[FileStoreTable] =
+    if (SchemaEvolutionHelper.commitSchemaEvolution(table, dataSchema, sparkSession, options)) {
+      val evolved = table.copyWithLatestSchema()
+      newTable = Some(evolved)
+      Some(evolved)
+    } else {
+      None
+    }
 
   def updateTableWithOptions(options: Map[String, String]): Unit = {
     newTable = Some(table.copy(options.asJava))
@@ -91,12 +98,19 @@ private[spark] trait SchemaEvolutionHelper extends WithFileStoreTable {
 
 private[spark] object SchemaEvolutionHelper {
 
-  /** Pure computation of the post-evolution schema (no side effects). */
-  def computeFinalSchema(
+  /**
+   * Merge `dataSchema` into the table's current schema (system columns dropped first), returning
+   * the evolved Paimon schema, or `None` when nothing changes. The single side-effect-free
+   * primitive behind both the catalog-write path ([[expectedAttrsForCatalogWrite]]) and the MERGE
+   * INTO in-memory path ([[evolvedTableInMemory]]); the persisting counterpart is
+   * [[commitSchemaEvolution]].
+   */
+  private def computeMergedSchema(
       table: FileStoreTable,
       dataSchema: StructType,
-      flags: SchemaEvolutionFlags): Option[StructType] = {
-    val dataRowType = SparkTypeUtils.toPaimonType(dataSchema).asInstanceOf[RowType]
+      flags: SchemaEvolutionFlags): Option[TableSchema] = {
+    val filtered = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
+    val dataRowType = SparkTypeUtils.toPaimonType(filtered).asInstanceOf[RowType]
     val current = table.schema()
     val merged =
       SchemaMergingUtils.mergeSchemas(
@@ -105,39 +119,64 @@ private[spark] object SchemaEvolutionHelper {
         flags.typeWidening,
         flags.allowExplicitCast,
         flags.caseSensitive)
-    if (merged.logicalRowType() == current.logicalRowType()) {
-      None
-    } else {
-      Some(SparkTypeUtils.fromPaimonRowType(merged.logicalRowType()))
-    }
+    if (merged.equals(current)) None else Some(merged)
   }
 
   /**
-   * Filter system columns, resolve flags, and commit the evolved schema to storage. Returns the new
-   * table only if the schema changed. Shared by catalog writes and MERGE INTO.
+   * Filter system columns, resolve flags, and commit the merge of `dataSchema` into the stored
+   * schema. Returns whether a schema change was committed. Shared by catalog writes and MERGE INTO;
+   * callers that need the evolved table reload it via `copyWithLatestSchema`.
    */
   def commitSchemaEvolution(
       table: FileStoreTable,
       dataSchema: StructType,
       sparkSession: SparkSession,
-      options: Options = new Options()): Option[FileStoreTable] = {
+      options: Options = new Options()): Boolean = {
     val filtered = SparkSystemColumns.filterSparkSystemColumns(dataSchema)
     val flags = readFlags(sparkSession, options)
     val dataRowType = SparkTypeUtils.toPaimonType(filtered).asInstanceOf[RowType]
-    if (
-      table
-        .store()
-        .mergeSchema(dataRowType, flags.typeWidening, flags.allowExplicitCast, flags.caseSensitive)
-    ) {
-      Some(table.copyWithLatestSchema())
-    } else {
-      None
+    table
+      .store()
+      .mergeSchema(dataRowType, flags.typeWidening, flags.allowExplicitCast, flags.caseSensitive)
+  }
+
+  /**
+   * Persist the schema that MERGE INTO evolved in memory (see [[evolvedTableInMemory]]), and
+   * refresh the catalog cache. Called from the merge command's `run` so the commit happens at
+   * execution, not during analysis. Re-merging the already-evolved schema is a no-op when nothing
+   * changed.
+   */
+  def commitEvolvedSchemaAtExecution(
+      table: FileStoreTable,
+      relation: DataSourceV2Relation,
+      sparkSession: SparkSession): Unit = {
+    if (!OptionUtils.writeMergeSchemaEnabled()) return
+    val evolved = SparkTypeUtils.fromPaimonRowType(table.schema().logicalRowType())
+    if (commitSchemaEvolution(table, evolved, sparkSession)) {
+      // Refresh the catalog cache so later queries see the new schema.
+      for (catalog <- relation.catalog; ident <- relation.identifier) {
+        catalog.asInstanceOf[TableCatalog].invalidateTable(ident)
+      }
     }
   }
 
-  /** Convert a StructType to fresh AttributeReferences (for use as resolver expected attrs). */
-  def toAttributes(schema: StructType): Seq[AttributeReference] =
-    schema.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+  /**
+   * Compute the post-evolution table in memory WITHOUT persisting it (returns `None` if unchanged).
+   * `SchemaMergingUtils.mergeSchemas` assigns the next schema id deterministically, so the
+   * persisting [[commitSchemaEvolution]] later produces an identical schema. Used by MERGE INTO so
+   * the analyzer can present the new columns in the plan while the actual commit is deferred to
+   * execution.
+   */
+  def evolvedTableInMemory(
+      table: FileStoreTable,
+      dataSchema: StructType,
+      sparkSession: SparkSession,
+      options: Options = new Options()): Option[FileStoreTable] =
+    computeMergedSchema(table, dataSchema, readFlags(sparkSession, options)).map(table.copy)
+
+  /** Whether schema evolution is enabled, from the per-write options or the session conf. */
+  def mergeSchemaEnabled(options: Options): Boolean =
+    options.get(SparkConnectorOptions.MERGE_SCHEMA) || OptionUtils.writeMergeSchemaEnabled()
 
   /**
    * Compute the resolver's expected attributes for a catalog write. When type widening is enabled
@@ -148,26 +187,22 @@ private[spark] object SchemaEvolutionHelper {
       table: DataSourceV2Relation,
       querySchema: StructType,
       options: Options,
-      mergeSchemaEnabled: Boolean,
       isByName: Boolean,
       sparkSession: SparkSession): Seq[Attribute] = {
     val flags = readFlags(sparkSession, options)
-    if (!isByName || !mergeSchemaEnabled || !flags.typeWidening) return table.output
+    if (!isByName || !mergeSchemaEnabled(options) || !flags.typeWidening) return table.output
 
     table.table.asInstanceOf[SparkTable].getTable match {
       case fst: FileStoreTable =>
-        val dataSchema = SparkSystemColumns.filterSparkSystemColumns(querySchema)
-        computeFinalSchema(fst, dataSchema, flags)
-          .map(toAttributes)
+        computeMergedSchema(fst, querySchema, flags)
+          .map(s => PaimonUtils.toAttributes(SparkTypeUtils.fromPaimonRowType(s.logicalRowType())))
           .getOrElse(table.output)
       case _ => table.output
     }
   }
 
   /** Resolve schema evolution flags from write options and session conf. */
-  def readFlags(
-      sparkSession: SparkSession,
-      options: Options = new Options()): SchemaEvolutionFlags = {
+  private def readFlags(sparkSession: SparkSession, options: Options): SchemaEvolutionFlags = {
     val typeWidening = options.get(SparkConnectorOptions.TYPE_WIDENING) || OptionUtils
       .writeMergeSchemaTypeWideningEnabled()
     val allowExplicitCast = options.get(SparkConnectorOptions.EXPLICIT_CAST) || OptionUtils

@@ -47,7 +47,6 @@ class PaimonV2Write(
   with SchemaEvolutionHelper
   with Logging {
 
-  private val writeSchema = mergeSchema(dataSchema, options)
   private val writeRequirement = PaimonWriteRequirement(table)
 
   override def requiredDistribution(): Distribution = {
@@ -63,6 +62,8 @@ class PaimonV2Write(
   }
 
   override def toBatch: BatchWrite = {
+    // Commit the evolved schema at execution (not at planning), then write to the evolved table.
+    val writeSchema = mergeSchema(dataSchema, options)
     SparkShimLoader.shim.createPaimonBatchWrite(
       table,
       writeSchema,

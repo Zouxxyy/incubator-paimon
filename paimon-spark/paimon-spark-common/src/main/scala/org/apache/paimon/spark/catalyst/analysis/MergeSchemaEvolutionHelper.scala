@@ -28,14 +28,14 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, MergeAction, MergeIntoTable}
-import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.paimon.shims.SparkShimLoader
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
- * MERGE INTO schema evolution (merge-schema=true). Computes + commits the evolved schema, then
- * rewrites the merge plan so that action alignment targets the new columns.
+ * MERGE INTO schema evolution (merge-schema=true). Computes the evolved schema in memory and
+ * rewrites the merge plan so that action alignment targets the new columns; the actual schema
+ * commit is deferred to execution (the merge command's `run`).
  *
  * Triggered by `UPDATE *` / `INSERT *` or explicit source-bound assignment keys. Scoped to source
  * columns referenced in matched/not-matched actions.
@@ -82,14 +82,12 @@ trait MergeSchemaEvolutionHelper extends ExpressionHelper {
       merge.sourceTable.output
         .filter(a => scopedNames.exists(n => resolver(n, a.name)))
         .map(a => StructField(a.name, a.dataType, a.nullable)))
+    // Compute the evolved schema in memory only; the actual schema commit is deferred to execution
+    // (the merge command's run / the V2 write's toBatch) so analysis stays side-effect-free. The
+    // evolved relation presents the new columns to the plan; existing rows read them as NULL.
     val updatedFileStoreTable = SchemaEvolutionHelper
-      .commitSchemaEvolution(fileStoreTable, sourceSchema, spark)
+      .evolvedTableInMemory(fileStoreTable, sourceSchema, spark)
       .getOrElse(return None)
-
-    // Invalidate Spark catalog cache so subsequent queries see the new schema.
-    for (catalog <- relation.catalog; ident <- relation.identifier) {
-      catalog.asInstanceOf[TableCatalog].invalidateTable(ident)
-    }
 
     val updatedV2Table = v2Table.copy(table = updatedFileStoreTable)
     val newOutput = buildEvolvedOutput(
