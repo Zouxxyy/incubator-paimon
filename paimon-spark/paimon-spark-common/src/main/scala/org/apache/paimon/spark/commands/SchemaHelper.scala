@@ -181,6 +181,15 @@ private[spark] object SchemaHelper {
   // Helpers
   // ---------------------------------------------------------------------------
 
+  /** Read flags from session conf only (no per-write options). Used by MERGE INTO path. */
+  def readFlags(sparkSession: SparkSession): (Boolean, Boolean, Boolean) = {
+    (
+      OptionUtils.writeMergeSchemaTypeWideningEnabled(),
+      OptionUtils.writeMergeSchemaExplicitCastEnabled(),
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+  }
+
+  /** Read flags from both per-write options and session conf. Used by INSERT/write paths. */
   def readFlags(sparkSession: SparkSession, options: Options): (Boolean, Boolean, Boolean) = {
     val typeWidening = options.get(SparkConnectorOptions.TYPE_WIDENING) || OptionUtils
       .writeMergeSchemaTypeWideningEnabled()

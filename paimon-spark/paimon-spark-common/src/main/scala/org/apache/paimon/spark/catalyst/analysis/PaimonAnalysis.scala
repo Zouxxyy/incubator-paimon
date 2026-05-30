@@ -18,6 +18,7 @@
 
 package org.apache.paimon.spark.catalyst.analysis
 
+import org.apache.paimon.options.Options
 import org.apache.paimon.spark.{SparkConnectorOptions, SparkTable}
 import org.apache.paimon.spark.catalyst.Compatibility
 import org.apache.paimon.spark.catalyst.analysis.PaimonRelation.isPaimonTable
@@ -29,13 +30,15 @@ import org.apache.paimon.table.FileStoreTable
 
 import org.apache.spark.sql.{PaimonUtils, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedTable}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation}
+
+import scala.collection.JavaConverters._
 
 class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
   import DataSourceV2Implicits._
@@ -45,39 +48,11 @@ class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
     case a @ PaimonV2WriteCommand(table)
         if !paimonWriteResolved(a.query, table) &&
           a.query.getTagValue(PAIMON_WRITE_RESOLVED).isEmpty =>
+      val opts = writeOptions(a)
       val mergeSchemaEnabled =
-        writeOptions(a).get(SparkConnectorOptions.MERGE_SCHEMA.key()).contains("true") ||
+        opts.get(SparkConnectorOptions.MERGE_SCHEMA.key()).contains("true") ||
           OptionUtils.writeMergeSchemaEnabled()
-      // Like Delta's analysis-time finalSchema: compute the post-evolution schema so that the
-      // resolver casts data to the evolved types (not the old target types). This enables
-      // type-widening for catalog INSERT/saveAsTable when type-widening=true.
-      val expected = if (mergeSchemaEnabled && a.isByName) {
-        val opts = writeOptions(a)
-        table.table.asInstanceOf[SparkTable].getTable match {
-          case fileStoreTable: FileStoreTable =>
-            val dataSchema = SparkSystemColumns.filterSparkSystemColumns(a.query.schema)
-            val allowExplicitCast =
-              opts.get(SparkConnectorOptions.EXPLICIT_CAST.key()).contains("true") ||
-                OptionUtils.writeMergeSchemaExplicitCastEnabled()
-            val typeWidening =
-              opts.get(SparkConnectorOptions.TYPE_WIDENING.key()).contains("true") ||
-                OptionUtils.writeMergeSchemaTypeWideningEnabled()
-            val caseSensitive = session.sessionState.conf.caseSensitiveAnalysis
-            SchemaHelper
-              .computeFinalSchema(
-                fileStoreTable,
-                dataSchema,
-                typeWidening,
-                allowExplicitCast,
-                caseSensitive)
-              .map(
-                fs => fs.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()))
-              .getOrElse(table.output)
-          case _ => table.output
-        }
-      } else {
-        table.output
-      }
+      val expected = computeExpectedAttrs(table, a.query, opts, mergeSchemaEnabled, a.isByName)
       val newQuery = PaimonOutputResolver.resolveOutputColumns(
         table.name,
         expected,
@@ -85,7 +60,6 @@ class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
         a.isByName,
         mergeSchemaEnabled)
       if (newQuery ne a.query) {
-        // Tag to short-circuit the next Analyzer pass; otherwise inline-kept extras would loop.
         newQuery.setTagValue(PAIMON_WRITE_RESOLVED, ())
         Compatibility.withNewQuery(a, newQuery)
       } else {
@@ -106,6 +80,29 @@ class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
         if d.resolved =>
       PaimonDropPartitions.validate(table, parts.asResolvedPartitionSpecs)
       d
+  }
+
+  /**
+   * Step 1 for catalog write: compute finalSchema as resolver expected attributes. If merge-schema
+   * is off, byPosition, or table is not FileStoreTable, falls back to table.output (no evolution).
+   */
+  private def computeExpectedAttrs(
+      table: DataSourceV2Relation,
+      query: LogicalPlan,
+      opts: Map[String, String],
+      mergeSchemaEnabled: Boolean,
+      isByName: Boolean): Seq[Attribute] = {
+    if (!mergeSchemaEnabled || !isByName) return table.output
+    table.table.asInstanceOf[SparkTable].getTable match {
+      case fst: FileStoreTable =>
+        val dataSchema = SparkSystemColumns.filterSparkSystemColumns(query.schema)
+        val (tw, ae, cs) = SchemaHelper.readFlags(session, Options.fromMap(opts.asJava))
+        SchemaHelper
+          .computeFinalSchema(fst, dataSchema, tw, ae, cs)
+          .map(_.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()))
+          .getOrElse(table.output)
+      case _ => table.output
+    }
   }
 
   private def writeOptions(v2WriteCommand: V2WriteCommand): Map[String, String] = {

@@ -85,9 +85,7 @@ trait MergeSchemaEvolutionHelper extends ExpressionHelper {
         .filter(a => scopedNames.exists(n => resolver(n, a.name)))
         .map(a => StructField(a.name, a.dataType, a.nullable)))
     val filteredSourceSchema = SparkSystemColumns.filterSparkSystemColumns(sourceSchema)
-    val allowExplicitCast = OptionUtils.writeMergeSchemaExplicitCastEnabled()
-    val typeWidening = OptionUtils.writeMergeSchemaTypeWideningEnabled()
-    val caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
+    val (typeWidening, allowExplicitCast, caseSensitive) = SchemaHelper.readFlags(spark)
     val updatedFileStoreTable = SchemaHelper
       .commitSchemaEvolution(
         fileStoreTable,
